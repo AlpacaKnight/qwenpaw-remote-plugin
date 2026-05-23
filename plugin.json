@@ -1,0 +1,50 @@
+{
+  "id": "remote",
+  "name": "Remote SSH",
+  "version": "0.1.0",
+  "type": "general",
+  "description": "SSH into remote devices and execute shell commands transparently on remote machines.",
+  "author": "QwenPaw Team",
+  "entry": {
+    "frontend": "ui/dist/index.js",
+    "backend": "plugin.py"
+  },
+  "dependencies": ["paramiko>=3.0.0"],
+  "min_version": "1.1.7",
+  "meta": {
+    "category": "remote-access",
+    "features": ["ssh-connections", "remote-shell-execution"],
+    "commands": [
+      {
+        "name": "/remote",
+        "description": "Manage the current remote SSH session and execute commands on the remote machine."
+      }
+    ],
+    "tools": [
+      {
+        "name": "remote_connect",
+        "description": "Connect to a remote device via SSH. After connecting, all shell commands in this conversation will execute on the remote machine.",
+        "icon": "LinkOutlined",
+        "config_fields": []
+      },
+      {
+        "name": "remote_disconnect",
+        "description": "Disconnect from the current remote SSH session.",
+        "icon": "DisconnectOutlined",
+        "config_fields": []
+      },
+      {
+        "name": "remote_list",
+        "description": "Show the current remote SSH connection status.",
+        "icon": "CloudOutlined",
+        "config_fields": []
+      },
+      {
+        "name": "remote_exec",
+        "description": "Explicitly execute a command on the remote machine via SSH.",
+        "icon": "CodeOutlined",
+        "config_fields": []
+      }
+    ]
+  }
+}
