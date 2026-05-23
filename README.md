@@ -93,7 +93,7 @@ chmod +x scripts/package.sh
 ./scripts/package.sh
 ```
 
-脚本会自动读取 `plugin.json` 中的版本号，生成安装包 `dist\qwenpaw-remote-plugin-<version>.zip`。ZIP 根目录必须直接包含 `plugin.json`，不要多包一层仓库目录。
+脚本会自动读取 `plugin.json` 中的版本号，生成安装包 `dist\qwenpaw-remote-plugin-<version>.zip`。ZIP 根目录必须直接包含 `plugin.json`，不要多包一层仓库目录。打包脚本会使用跨平台的 ZIP 内部路径格式，避免在不同系统安装时找不到 `tools/`、`routers/` 等模块目录。
 
 如果本机已经安装过前端依赖，可以跳过 `npm ci`：
 

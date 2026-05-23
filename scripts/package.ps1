@@ -31,6 +31,29 @@ Copy-Item -LiteralPath "ui\dist\index.js" -Destination (Join-Path $staging "ui\d
 Get-ChildItem -Path $staging -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
 Get-ChildItem -Path $staging -Recurse -File -Include "*.pyc", "*.pyo" | Remove-Item -Force
 
-Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zipPath -Force
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
+$zip = [System.IO.Compression.ZipFile]::Open(
+    $zipPath,
+    [System.IO.Compression.ZipArchiveMode]::Create
+)
+try {
+    $stagingRoot = (Resolve-Path $staging).Path.TrimEnd("\", "/")
+    Get-ChildItem -Path $staging -Recurse -File | ForEach-Object {
+        $absolutePath = $_.FullName
+        $entryName = $absolutePath.Substring($stagingRoot.Length + 1).Replace("\", "/")
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip,
+            $absolutePath,
+            $entryName,
+            [System.IO.Compression.CompressionLevel]::Optimal
+        ) | Out-Null
+    }
+}
+finally {
+    $zip.Dispose()
+}
 
 Write-Host "Created $zipPath"
