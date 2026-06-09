@@ -20,7 +20,6 @@ function buildPlugin() {
     Input,
     Form,
     Modal,
-    Descriptions,
     Spin,
     Alert,
     Switch,
@@ -30,6 +29,7 @@ function buildPlugin() {
     Popconfirm,
     Empty,
     Tooltip,
+    Popover,
   } = antd;
   const { Text, Title, Paragraph } = Typography;
   const { useState, useEffect, useCallback } = React;
@@ -41,7 +41,10 @@ function buildPlugin() {
     ReloadOutlined,
     PlusOutlined,
     DeleteOutlined,
+    EditOutlined,
     LoadingOutlined,
+    LaptopOutlined,
+    ThunderboltOutlined,
   } = antdIcons || {};
 
   // ── Helpers ──────────────────────────────────────────────────────────
@@ -262,6 +265,7 @@ function buildPlugin() {
     const [activeProfileId, setActiveProfileId] = useState<string>("");
     const [loading, setLoading] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
+    const [editingProfile, setEditingProfile] = useState<any | null>(null);
     const [saving, setSaving] = useState(false);
     const [connectingId, setConnectingId] = useState<string | null>(null);
     const [form] = Form.useForm();
@@ -291,12 +295,22 @@ function buildPlugin() {
     const handleSave = async (values: any) => {
       setSaving(true);
       try {
-        await apiFetch("/remote/profiles", {
-          method: "POST",
-          body: JSON.stringify(values),
-        });
-        antdMessage.success("Connection profile saved");
+        await apiFetch(
+          editingProfile
+            ? `/remote/profiles/${editingProfile.id}`
+            : "/remote/profiles",
+          {
+            method: editingProfile ? "PUT" : "POST",
+            body: JSON.stringify(values),
+          },
+        );
+        antdMessage.success(
+          editingProfile
+            ? "Connection profile updated"
+            : "Connection profile saved",
+        );
         setModalOpen(false);
+        setEditingProfile(null);
         form.resetFields();
         fetchProfiles();
       } catch (e: any) {
@@ -304,6 +318,26 @@ function buildPlugin() {
       } finally {
         setSaving(false);
       }
+    };
+
+    const openNewProfileModal = () => {
+      setEditingProfile(null);
+      form.resetFields();
+      setModalOpen(true);
+    };
+
+    const openEditProfileModal = (profile: any) => {
+      setEditingProfile(profile);
+      form.setFieldsValue({
+        name: profile.name,
+        host: profile.host,
+        port: profile.port,
+        username: profile.username,
+        password: "",
+        key_path: profile.key_path,
+        passphrase: "",
+      });
+      setModalOpen(true);
     };
 
     const handleToggleConnect = async (profile: any) => {
@@ -389,7 +423,7 @@ function buildPlugin() {
             {
               type: "primary",
               icon: React.createElement(PlusOutlined),
-              onClick: () => setModalOpen(true),
+              onClick: openNewProfileModal,
             },
             "New Connection",
           ),
@@ -508,6 +542,16 @@ function buildPlugin() {
                               }),
                             ),
                         React.createElement(
+                          Tooltip,
+                          { title: "Edit this connection profile" },
+                          React.createElement(Button, {
+                            type: "text",
+                            size: "small",
+                            icon: React.createElement(EditOutlined),
+                            onClick: () => openEditProfileModal(profile),
+                          }),
+                        ),
+                        React.createElement(
                           Popconfirm,
                           {
                             title: "Delete this connection profile?",
@@ -533,10 +577,13 @@ function buildPlugin() {
       React.createElement(
         Modal,
         {
-          title: "New SSH Connection",
+          title: editingProfile
+            ? "Edit SSH Connection"
+            : "New SSH Connection",
           open: modalOpen,
           onCancel: () => {
             setModalOpen(false);
+            setEditingProfile(null);
             form.resetFields();
           },
           footer: null,
@@ -590,7 +637,9 @@ function buildPlugin() {
             Form.Item,
             { name: "password", label: "Password" },
             React.createElement(Input.Password, {
-              placeholder: "Leave empty if using key auth",
+              placeholder: editingProfile
+                ? "Leave empty to keep the saved password"
+                : "Leave empty if using key auth",
             }),
           ),
           React.createElement(
@@ -604,7 +653,9 @@ function buildPlugin() {
             Form.Item,
             { name: "passphrase", label: "Key Passphrase" },
             React.createElement(Input.Password, {
-              placeholder: "If key is encrypted",
+              placeholder: editingProfile
+                ? "Leave empty to keep the saved passphrase"
+                : "If key is encrypted",
             }),
           ),
           React.createElement(
@@ -618,12 +669,652 @@ function buildPlugin() {
                 loading: saving,
                 style: { width: "100%" },
               },
-              "Save Profile",
+              editingProfile ? "Update Profile" : "Save Profile",
             ),
           ),
         ),
       ),
     );
+  }
+
+  // ── Header SSH Status Indicator ──────────────────────────────────────
+
+  function RemoteStatusIndicator() {
+    const [connection, setConnection] = useState<any>(null);
+    const [profiles, setProfiles] = useState<any[]>([]);
+    const [activeProfileId, setActiveProfileId] = useState<string>("");
+    const [connectingId, setConnectingId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string>("");
+
+    const fetchStatus = useCallback(async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const sessionId = getSessionId() || "";
+        const encodedSessionId = encodeURIComponent(sessionId);
+        const [connectionData, profileData] = await Promise.all([
+          apiFetch(`/remote/connections?session_id=${encodedSessionId}`),
+          apiFetch(`/remote/profiles?session_id=${encodedSessionId}`),
+        ]);
+        const conns = connectionData.connections || [];
+        setConnection(conns.length > 0 ? conns[0] : null);
+        setProfiles(profileData.profiles || []);
+        setActiveProfileId(profileData.active_profile_id || "");
+      } catch (e: any) {
+        setError(e.message);
+        setConnection(null);
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+
+    useEffect(() => {
+      fetchStatus();
+      const interval = setInterval(fetchStatus, 5000);
+      return () => clearInterval(interval);
+    }, [fetchStatus]);
+
+    const handleDisconnect = async () => {
+      const sessionId = getSessionId();
+      if (!sessionId) return;
+      try {
+        await apiFetch(`/remote/connections/${sessionId}`, {
+          method: "DELETE",
+        });
+        antdMessage.success("Disconnected");
+        fetchStatus();
+      } catch (e: any) {
+        antdMessage.error(`Disconnect failed: ${e.message}`);
+      }
+    };
+
+    const handleProfileClick = async (profile: any) => {
+      const sessionId = getSessionId();
+      if (!sessionId) {
+        antdMessage.error("No active session. Open a chat first.");
+        return;
+      }
+
+      const isActive = profile.id === activeProfileId;
+      setConnectingId(profile.id);
+      try {
+        if (isActive) {
+          await apiFetch(`/remote/connections/${sessionId}`, {
+            method: "DELETE",
+          });
+          antdMessage.success("Disconnected");
+        } else {
+          await apiFetch(`/remote/profiles/${profile.id}/connect`, {
+            method: "POST",
+            body: JSON.stringify({ session_id: sessionId }),
+          });
+          antdMessage.success(`Connected to ${profile.name}`);
+        }
+        fetchStatus();
+      } catch (e: any) {
+        antdMessage.error(
+          `${isActive ? "Disconnect" : "Connection"} failed: ${e.message}`,
+        );
+      } finally {
+        setConnectingId(null);
+      }
+    };
+
+    const isConnected = connection !== null;
+    const uptime = connection?.uptime_seconds || 0;
+    let uptimeStr = "";
+    if (isConnected) {
+      if (uptime < 60) uptimeStr = `${uptime.toFixed(0)}s`;
+      else if (uptime < 3600) uptimeStr = `${(uptime / 60).toFixed(0)}m`;
+      else uptimeStr = `${(uptime / 3600).toFixed(1)}h`;
+    }
+
+    const trigger = React.createElement(
+      "button",
+      {
+        type: "button",
+        style: {
+          height: 38,
+          minWidth: 156,
+          maxWidth: 220,
+          padding: "0 12px",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          border: `1px solid ${isConnected ? "#b7eb8f" : "#d9d9d9"}`,
+          borderRadius: 6,
+          background: isConnected ? "#f6ffed" : "#fff",
+          color: isConnected ? "#237804" : "#595959",
+          font: "inherit",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+        },
+        "aria-label": isConnected
+          ? `SSH connected to ${connection.username}@${connection.host}`
+          : "SSH disconnected",
+      },
+      React.createElement(Badge, {
+        status: isConnected ? "success" : error ? "error" : "default",
+      }),
+      React.createElement(
+        "span",
+        {
+          style: {
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            fontSize: 14,
+            fontWeight: 600,
+          },
+        },
+        isConnected
+          ? `${connection.username}@${connection.host}`
+          : loading
+            ? "SSH Checking"
+            : "SSH Offline",
+      ),
+    );
+
+    const content = React.createElement(
+      "div",
+      { style: { width: 320 } },
+      React.createElement(
+        Space,
+        { direction: "vertical", size: 10, style: { width: "100%" } },
+        isConnected
+          ? React.createElement(
+              Space,
+              { direction: "vertical", size: 6, style: { width: "100%" } },
+              React.createElement(
+                Space,
+                { align: "center" },
+                React.createElement(LaptopOutlined || CloudOutlined || "span"),
+                React.createElement(Text, { strong: true }, "SSH Connected"),
+              ),
+              React.createElement(
+                Text,
+                { code: true, ellipsis: true, style: { maxWidth: 296 } },
+                `${connection.username}@${connection.host}:${connection.port}`,
+              ),
+              React.createElement(
+                Space,
+                { size: 6 },
+                React.createElement(ThunderboltOutlined || "span"),
+                React.createElement(Text, { type: "secondary" }, uptimeStr),
+              ),
+            )
+          : React.createElement(
+              Text,
+              { type: error ? "danger" : "secondary", style: { fontSize: 12 } },
+              error || "No active SSH connection for this chat.",
+            ),
+        React.createElement(
+          "div",
+          { style: { borderTop: "1px solid #f0f0f0", paddingTop: 8 } },
+          React.createElement(Text, { strong: true }, "Saved Devices"),
+        ),
+        profiles.length === 0
+          ? React.createElement(
+              Text,
+              { type: "secondary", style: { fontSize: 12 } },
+              "No saved devices. Add one from Remote SSH.",
+            )
+          : React.createElement(
+              Space,
+              { direction: "vertical", size: 6, style: { width: "100%" } },
+              ...profiles.map((profile: any) => {
+                const active = profile.id === activeProfileId;
+                return React.createElement(
+                  "div",
+                  {
+                    key: profile.id,
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    },
+                  },
+                  React.createElement(
+                    "div",
+                    { style: { minWidth: 0 } },
+                    React.createElement(
+                      Text,
+                      { strong: active, ellipsis: true, style: { maxWidth: 190 } },
+                      profile.name || `${profile.username}@${profile.host}`,
+                    ),
+                    React.createElement(
+                      "div",
+                      null,
+                      React.createElement(
+                        Text,
+                        {
+                          type: "secondary",
+                          ellipsis: true,
+                          style: { maxWidth: 190, fontSize: 12 },
+                        },
+                        `${profile.username}@${profile.host}:${profile.port}`,
+                      ),
+                    ),
+                  ),
+                  React.createElement(
+                    Button,
+                    {
+                      size: "small",
+                      type: active ? "default" : "primary",
+                      danger: active,
+                      loading: connectingId === profile.id,
+                      onClick: () => handleProfileClick(profile),
+                    },
+                    active ? "Disconnect" : "Connect",
+                  ),
+                );
+              }),
+            ),
+      ),
+    );
+
+    return React.createElement(
+      Popover,
+      {
+        content,
+        trigger: "click",
+        placement: "bottom",
+      },
+      React.createElement(Tooltip, {
+        title: isConnected
+          ? `${connection.username}@${connection.host}:${connection.port}`
+          : "No active SSH connection",
+      }, trigger),
+    );
+  }
+
+  function registerHeaderStatus() {
+    const qwenpaw = (window as any).QwenPaw;
+    const item = {
+      id: "remote-ssh-status",
+      key: "remote-ssh-status",
+      pluginId: "remote",
+      label: "Remote SSH",
+      component: RemoteStatusIndicator,
+      priority: 15,
+      placement: "left",
+    };
+
+    const candidates: Array<[string, any[]]> = [
+      ["registerHeaderWidget", [item]],
+      ["registerTopBarItem", [item]],
+      ["registerNavWidget", [item]],
+      ["registerNavbarItem", [item]],
+      ["registerToolbarItem", [item]],
+      ["registerStatusWidget", [item]],
+      ["registerSlot", ["header:left", item]],
+      ["registerSlot", ["topbar:left", item]],
+    ];
+
+    for (const [name, args] of candidates) {
+      const register = qwenpaw?.[name];
+      if (typeof register !== "function") continue;
+      try {
+        register.apply(qwenpaw, args);
+        return true;
+      } catch (e) {
+        console.warn(`[Remote] ${name} failed:`, e);
+      }
+    }
+
+    console.warn(
+      "[Remote] No QwenPaw header extension API found; SSH status indicator was not registered.",
+    );
+    return false;
+  }
+
+  function mountHeaderStatusFallback() {
+    const existing = document.getElementById("remote-ssh-header-status");
+    if (existing) return true;
+
+    const matched = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "button,a,[role='button'],span,div",
+      ),
+    ).filter((el) => {
+      const text = (el.textContent || "").trim();
+      const rect = el.getBoundingClientRect();
+      return (
+        rect.top >= 0 &&
+        rect.top < 96 &&
+        rect.width > 0 &&
+        rect.width < 320 &&
+        rect.height > 0 &&
+        (text.includes("文档资料") ||
+          text.includes("GitHub") ||
+          text.includes("代码"))
+      );
+    });
+    const targets = Array.from(
+      new Set(
+        matched.map(
+          (el) =>
+            (el.closest("button,a,[role='button']") as HTMLElement | null) ||
+            el,
+        ),
+      ),
+    ).sort((a, b) => {
+      const score = (el: HTMLElement) => {
+        const text = (el.textContent || "").trim();
+        const rect = el.getBoundingClientRect();
+        const exact =
+          text === "文档资料" || text === "GitHub" || text === "代码";
+        return (exact ? 0 : 10000) + rect.width * rect.height;
+      };
+      return score(a) - score(b);
+    });
+    const target = targets[0];
+    const parent = target?.parentElement;
+    if (!target || !parent) {
+      console.warn("[Remote] Header DOM mount point not found.");
+      return false;
+    }
+
+    const root = document.createElement("div");
+    root.id = "remote-ssh-header-status";
+    root.style.display = "inline-flex";
+    root.style.alignItems = "center";
+    root.style.margin = "0 8px";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.style.height = "38px";
+    button.style.minWidth = "156px";
+    button.style.maxWidth = "220px";
+    button.style.padding = "0 12px";
+    button.style.display = "inline-flex";
+    button.style.alignItems = "center";
+    button.style.justifyContent = "center";
+    button.style.gap = "8px";
+    button.style.border = "1px solid #d9d9d9";
+    button.style.borderRadius = "6px";
+    button.style.background = "#fff";
+    button.style.color = "#595959";
+    button.style.font = "inherit";
+    button.style.cursor = "pointer";
+    button.style.whiteSpace = "nowrap";
+
+    const dot = document.createElement("span");
+    dot.style.width = "8px";
+    dot.style.height = "8px";
+    dot.style.borderRadius = "50%";
+    dot.style.background = "#bfbfbf";
+    dot.style.flex = "0 0 auto";
+
+    const label = document.createElement("span");
+    label.textContent = "SSH Offline";
+    label.style.minWidth = "0";
+    label.style.overflow = "hidden";
+    label.style.textOverflow = "ellipsis";
+    label.style.fontSize = "14px";
+    label.style.fontWeight = "600";
+
+    const panel = document.createElement("div");
+    panel.style.position = "fixed";
+    panel.style.zIndex = "10000";
+    panel.style.width = "320px";
+    panel.style.padding = "12px";
+    panel.style.border = "1px solid #d9d9d9";
+    panel.style.borderRadius = "8px";
+    panel.style.background = "#fff";
+    panel.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.12)";
+    panel.style.display = "none";
+
+    const panelTitle = document.createElement("div");
+    panelTitle.style.fontWeight = "600";
+    panelTitle.style.marginBottom = "8px";
+
+    const panelBody = document.createElement("div");
+    panelBody.style.fontSize = "12px";
+    panelBody.style.color = "#595959";
+    panelBody.style.wordBreak = "break-all";
+
+    const profileTitle = document.createElement("div");
+    profileTitle.textContent = "Saved Devices";
+    profileTitle.style.marginTop = "10px";
+    profileTitle.style.paddingTop = "10px";
+    profileTitle.style.borderTop = "1px solid #f0f0f0";
+    profileTitle.style.fontWeight = "600";
+
+    const profileList = document.createElement("div");
+    profileList.style.display = "flex";
+    profileList.style.flexDirection = "column";
+    profileList.style.gap = "6px";
+    profileList.style.marginTop = "8px";
+
+    const disconnect = document.createElement("button");
+    disconnect.type = "button";
+    disconnect.textContent = "Disconnect";
+    disconnect.style.marginTop = "10px";
+    disconnect.style.height = "28px";
+    disconnect.style.padding = "0 10px";
+    disconnect.style.border = "1px solid #ffccc7";
+    disconnect.style.borderRadius = "4px";
+    disconnect.style.background = "#fff";
+    disconnect.style.color = "#cf1322";
+    disconnect.style.cursor = "pointer";
+    disconnect.style.display = "none";
+
+    panel.append(panelTitle, panelBody, disconnect, profileTitle, profileList);
+    button.append(dot, label);
+    root.append(button, panel);
+    parent.insertBefore(root, target);
+
+    let currentConnection: any = null;
+
+    const renderProfiles = (profiles: any[], activeProfileId: string) => {
+      profileList.replaceChildren();
+
+      if (profiles.length === 0) {
+        const empty = document.createElement("div");
+        empty.textContent = "No saved devices. Add one from Remote SSH.";
+        empty.style.color = "#8c8c8c";
+        empty.style.fontSize = "12px";
+        profileList.append(empty);
+        return;
+      }
+
+      for (const profile of profiles) {
+        const active = profile.id === activeProfileId;
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        row.style.justifyContent = "space-between";
+        row.style.gap = "8px";
+
+        const info = document.createElement("div");
+        info.style.minWidth = "0";
+
+        const name = document.createElement("div");
+        name.textContent =
+          profile.name || `${profile.username}@${profile.host}`;
+        name.style.fontWeight = active ? "600" : "400";
+        name.style.overflow = "hidden";
+        name.style.textOverflow = "ellipsis";
+        name.style.whiteSpace = "nowrap";
+
+        const endpoint = document.createElement("div");
+        endpoint.textContent = `${profile.username}@${profile.host}:${profile.port}`;
+        endpoint.style.color = "#8c8c8c";
+        endpoint.style.fontSize = "12px";
+        endpoint.style.overflow = "hidden";
+        endpoint.style.textOverflow = "ellipsis";
+        endpoint.style.whiteSpace = "nowrap";
+
+        const action = document.createElement("button");
+        action.type = "button";
+        action.textContent = active ? "Disconnect" : "Connect";
+        action.style.height = "28px";
+        action.style.padding = "0 10px";
+        action.style.border = active
+          ? "1px solid #ffccc7"
+          : "1px solid #1677ff";
+        action.style.borderRadius = "4px";
+        action.style.background = active ? "#fff" : "#1677ff";
+        action.style.color = active ? "#cf1322" : "#fff";
+        action.style.cursor = "pointer";
+        action.addEventListener("click", async () => {
+          const sessionId = getSessionId();
+          if (!sessionId) {
+            antdMessage.error("No active session. Open a chat first.");
+            return;
+          }
+
+          action.disabled = true;
+          action.textContent = active ? "Disconnecting" : "Connecting";
+          try {
+            if (active) {
+              await apiFetch(`/remote/connections/${sessionId}`, {
+                method: "DELETE",
+              });
+              antdMessage.success("Disconnected");
+            } else {
+              await apiFetch(`/remote/profiles/${profile.id}/connect`, {
+                method: "POST",
+                body: JSON.stringify({ session_id: sessionId }),
+              });
+              antdMessage.success(`Connected to ${profile.name}`);
+            }
+            await refresh();
+          } catch (e: any) {
+            antdMessage.error(
+              `${active ? "Disconnect" : "Connection"} failed: ${e.message}`,
+            );
+          } finally {
+            action.disabled = false;
+          }
+        });
+
+        info.append(name, endpoint);
+        row.append(info, action);
+        profileList.append(row);
+      }
+    };
+
+    const render = (
+      connection: any,
+      profiles: any[] = [],
+      activeProfileId = "",
+      error = "",
+    ) => {
+      currentConnection = connection;
+      if (connection) {
+        const host = `${connection.username}@${connection.host}:${connection.port}`;
+        button.style.borderColor = "#b7eb8f";
+        button.style.background = "#f6ffed";
+        button.style.color = "#237804";
+        dot.style.background = "#52c41a";
+        label.textContent = `${connection.username}@${connection.host}`;
+        button.title = host;
+        panelTitle.textContent = "SSH Connected";
+        panelBody.textContent = `${host}\nUptime: ${Math.round(
+          connection.uptime_seconds || 0,
+        )}s\nWork Dir: ${connection.default_cwd || "/"}`;
+        panelBody.style.whiteSpace = "pre-line";
+        disconnect.style.display = "";
+      } else {
+        button.style.borderColor = error ? "#ffccc7" : "#d9d9d9";
+        button.style.background = "#fff";
+        button.style.color = error ? "#cf1322" : "#595959";
+        dot.style.background = error ? "#ff4d4f" : "#bfbfbf";
+        label.textContent = error ? "SSH Error" : "SSH Offline";
+        button.title = error || "No active SSH connection";
+        panelTitle.textContent = error ? "SSH Status Error" : "SSH Offline";
+        panelBody.textContent =
+          error || "No active SSH connection for this chat.";
+        panelBody.style.whiteSpace = "normal";
+        disconnect.style.display = "none";
+      }
+      renderProfiles(profiles, activeProfileId);
+    };
+
+    const refresh = async () => {
+      try {
+        const sessionId = getSessionId() || "";
+        const encodedSessionId = encodeURIComponent(sessionId);
+        const [connectionData, profileData] = await Promise.all([
+          apiFetch(`/remote/connections?session_id=${encodedSessionId}`),
+          apiFetch(`/remote/profiles?session_id=${encodedSessionId}`),
+        ]);
+        const conns = connectionData.connections || [];
+        render(
+          conns.length > 0 ? conns[0] : null,
+          profileData.profiles || [],
+          profileData.active_profile_id || "",
+        );
+      } catch (e: any) {
+        render(null, [], "", e.message || "Failed to load SSH status.");
+      }
+    };
+
+    const placePanel = () => {
+      const rect = button.getBoundingClientRect();
+      panel.style.top = `${rect.bottom + 8}px`;
+      panel.style.left = `${Math.min(
+        rect.left,
+        window.innerWidth - 340,
+      )}px`;
+    };
+
+    button.addEventListener("click", () => {
+      placePanel();
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+    });
+    document.addEventListener("click", (event) => {
+      if (!root.contains(event.target as Node)) panel.style.display = "none";
+    });
+    disconnect.addEventListener("click", async () => {
+      const sessionId = getSessionId();
+      if (!sessionId || !currentConnection) return;
+      try {
+        await apiFetch(`/remote/connections/${sessionId}`, {
+          method: "DELETE",
+        });
+        antdMessage.success("Disconnected");
+        await refresh();
+      } catch (e: any) {
+        antdMessage.error(`Disconnect failed: ${e.message}`);
+      }
+    });
+
+    refresh();
+    window.setInterval(refresh, 5000);
+    return true;
+  }
+
+  function mountHeaderStatusFallbackWhenReady() {
+    if (mountHeaderStatusFallback()) return;
+
+    let attempts = 0;
+    const maxAttempts = 40;
+    let observer: MutationObserver | null = null;
+
+    const tryMount = () => {
+      attempts += 1;
+      if (mountHeaderStatusFallback()) {
+        observer?.disconnect();
+        window.clearInterval(timer);
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        observer?.disconnect();
+        window.clearInterval(timer);
+      }
+    };
+
+    const timer = window.setInterval(tryMount, 250);
+    observer = new MutationObserver(tryMount);
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   // ── Register plugin ──────────────────────────────────────────────────
@@ -644,6 +1335,10 @@ function buildPlugin() {
       priority: 20,
     },
   ]);
+
+  if (!registerHeaderStatus()) {
+    mountHeaderStatusFallbackWhenReady();
+  }
 }
 
 // Auto-initialize when loaded

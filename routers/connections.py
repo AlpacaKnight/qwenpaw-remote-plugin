@@ -7,7 +7,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..ssh_manager import get_ssh_manager
-from ..store import create_profile, delete_profile, get_profile, list_profiles
+from ..store import (
+    create_profile,
+    delete_profile,
+    get_profile,
+    list_profiles,
+    update_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +121,28 @@ async def create_profile_route(req: ProfileRequest):
         profile = create_profile(req.model_dump())
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    response = dict(profile)
+    response.pop("password", None)
+    response.pop("passphrase", None)
+    return response
+
+
+@router.put("/profiles/{profile_id}")
+async def update_profile_route(profile_id: str, req: ProfileRequest):
+    """Update a persisted SSH profile."""
+    try:
+        profile = update_profile(profile_id, req.model_dump())
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Profile not found: {profile_id}",
+        )
+
+    await get_ssh_manager().disconnect_profile(profile_id)
 
     response = dict(profile)
     response.pop("password", None)

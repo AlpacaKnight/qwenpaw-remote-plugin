@@ -1,7 +1,7 @@
 {
   "id": "remote",
   "name": "Remote SSH",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "general",
   "description": "SSH into remote devices and execute shell commands transparently on remote machines.",
   "author": "QwenPaw Team",

@@ -42,8 +42,53 @@ def create_profile(payload: dict[str, Any]) -> dict[str, Any]:
     data = _load_profiles_file()
     profiles = list_profiles()
 
+    profile = _normalize_profile_payload(payload, profile_id=uuid4().hex)
+
+    profiles.append(profile)
+    data["profiles"] = profiles
+    _save_profiles_file(data)
+    return profile
+
+
+def update_profile(
+    profile_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    data = _load_profiles_file()
+    profiles = list_profiles()
+
+    updated_profile = None
+    for index, profile in enumerate(profiles):
+        if profile.get("id") != profile_id:
+            continue
+
+        merged = dict(profile)
+        merged.update(
+            _normalize_profile_payload(
+                payload,
+                profile_id=profile_id,
+                existing=profile,
+            )
+        )
+        profiles[index] = merged
+        updated_profile = merged
+        break
+
+    if updated_profile is None:
+        return None
+
+    data["profiles"] = profiles
+    _save_profiles_file(data)
+    return updated_profile
+
+
+def _normalize_profile_payload(
+    payload: dict[str, Any],
+    profile_id: str,
+    existing: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     profile = {
-        "id": uuid4().hex,
+        "id": profile_id,
         "name": str(payload.get("name", "")).strip() or _default_name(payload),
         "host": str(payload.get("host", "")).strip(),
         "port": int(payload.get("port", 22)),
@@ -53,9 +98,12 @@ def create_profile(payload: dict[str, Any]) -> dict[str, Any]:
         "passphrase": str(payload.get("passphrase", "")),
     }
 
-    profiles.append(profile)
-    data["profiles"] = profiles
-    _save_profiles_file(data)
+    if existing is not None:
+        if not profile["password"]:
+            profile["password"] = str(existing.get("password", ""))
+        if not profile["passphrase"]:
+            profile["passphrase"] = str(existing.get("passphrase", ""))
+
     return profile
 
 
