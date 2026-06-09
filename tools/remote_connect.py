@@ -18,6 +18,14 @@ async def remote_connect(
     password: str = "",
     key_path: str = "",
     passphrase: str = "",
+    jump_id: str = "",
+    jump_name: str = "",
+    jump_host: str = "",
+    jump_port: int = 22,
+    jump_username: str = "",
+    jump_password: str = "",
+    jump_key_path: str = "",
+    jump_passphrase: str = "",
 ) -> ToolResponse:
     """Connect to a remote device via SSH.
 
@@ -31,6 +39,14 @@ async def remote_connect(
         password: SSH password. Key-based auth is recommended.
         key_path: Path to SSH private key file.
         passphrase: Passphrase for the private key (if encrypted).
+        jump_id: Saved jump host ID.
+        jump_name: Saved jump host display name.
+        jump_host: Inline jump host IP or hostname.
+        jump_port: Inline jump host SSH port.
+        jump_username: Inline jump host SSH username.
+        jump_password: Inline jump host SSH password.
+        jump_key_path: Inline jump host private key path.
+        jump_passphrase: Inline jump host private key passphrase.
 
     Returns:
         ToolResponse with connection status.
@@ -70,6 +86,14 @@ async def remote_connect(
             password=password,
             key_path=key_path,
             passphrase=passphrase,
+            jump_host_id=jump_id,
+            jump_name=jump_name,
+            jump_host=jump_host,
+            jump_port=jump_port,
+            jump_username=jump_username,
+            jump_password=jump_password,
+            jump_key_path=jump_key_path,
+            jump_passphrase=jump_passphrase,
         )
     except (ConnectionError, ValueError) as e:
         return ToolResponse(
@@ -81,12 +105,21 @@ async def remote_connect(
             ],
         )
 
+    via = ""
+    if info.get("via_jump_host"):
+        jump_label = info.get("jump_host_name") or (
+            f"{info.get('jump_username')}@"
+            f"{info.get('jump_host')}:{info.get('jump_port')}"
+        )
+        via = f"Via jump host: {jump_label}\n"
+
     return ToolResponse(
         content=[
             TextBlock(
                 type="text",
                 text=(
                     f"Connected to {username}@{host}:{port}\n"
+                    f"{via}"
                     f"Remote working directory: {info['default_cwd']}\n"
                     f"All subsequent shell commands in this conversation "
                     f"will execute on this remote machine.\n"

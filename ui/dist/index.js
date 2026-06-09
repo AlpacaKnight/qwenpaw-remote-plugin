@@ -1,190 +1,211 @@
-function ze() {
-  var q, X, Y, Z;
-  const { React: e, antd: te, antdIcons: ne, getApiUrl: oe, getApiToken: se } = window.QwenPaw.host, {
-    Card: L,
-    Tag: U,
-    Typography: re,
-    Space: g,
-    Button: N,
-    Input: D,
-    Form: R,
-    Modal: le,
-    Spin: ce,
-    Alert: ie,
-    Switch: ae,
+const te = "0.1.2-jump-host-status-theme";
+function be() {
+  var we, xe, ve, Se;
+  const v = window;
+  if (v.__remotePluginInitializedBuild === te) return;
+  v.__remotePluginInitialized = !0, v.__remotePluginInitializedBuild = te;
+  const { React: e, antd: N, antdIcons: X, getApiUrl: Y, getApiToken: $e } = window.QwenPaw.host, {
+    Card: j,
+    Tag: re,
+    Typography: Ie,
+    Space: x,
+    Button: A,
+    Input: z,
+    Select: ke,
+    Form: E,
+    Modal: ae,
+    Spin: Te,
+    Alert: _e,
+    Switch: Pe,
     message: f,
-    List: de,
-    Badge: B,
-    Popconfirm: me,
-    Empty: ue,
-    Tooltip: M,
-    Popover: pe
-  } = te, { Text: E, Title: ye, Paragraph: fe } = re, { useState: $, useEffect: Q, useCallback: J } = e, {
-    CloudOutlined: K,
-    LinkOutlined: he,
-    DisconnectOutlined: ge,
-    CodeOutlined: Ee,
-    ReloadOutlined: we,
-    PlusOutlined: Se,
-    DeleteOutlined: xe,
-    EditOutlined: be,
-    LoadingOutlined: ve,
-    LaptopOutlined: Ce,
-    ThunderboltOutlined: $e
-  } = ne || {};
-  function V(n) {
-    var m, a;
-    const s = (a = (m = n == null ? void 0 : n.content) == null ? void 0 : m[0]) == null ? void 0 : a.data, r = s == null ? void 0 : s.arguments;
-    if (typeof r == "string")
+    List: le,
+    Badge: ne,
+    Popconfirm: ie,
+    Empty: oe,
+    Tooltip: Z,
+    Popover: Re
+  } = N, { Text: C, Title: ce, Paragraph: De } = Ie, { useState: k, useEffect: de, useCallback: me } = e, {
+    CloudOutlined: ue,
+    LinkOutlined: He,
+    DisconnectOutlined: Oe,
+    CodeOutlined: Be,
+    ReloadOutlined: ze,
+    PlusOutlined: pe,
+    DeleteOutlined: ye,
+    EditOutlined: he,
+    LoadingOutlined: Le,
+    LaptopOutlined: Ne,
+    ThunderboltOutlined: We
+  } = X || {};
+  function fe(n) {
+    var m, c;
+    const r = (c = (m = n == null ? void 0 : n.content) == null ? void 0 : m[0]) == null ? void 0 : c.data, o = r == null ? void 0 : r.arguments;
+    if (typeof o == "string")
       try {
-        return JSON.parse(r);
+        return JSON.parse(o);
       } catch {
         return {};
       }
-    return r ?? {};
+    return o ?? {};
   }
-  function F(n) {
-    const s = n == null ? void 0 : n.content;
-    return !s || !Array.isArray(s) ? "" : s.filter((r) => r.type === "text").map((r) => r.text || "").join(`
+  function ee(n) {
+    const r = n == null ? void 0 : n.content;
+    return !r || !Array.isArray(r) ? "" : r.filter((o) => o.type === "text").map((o) => o.text || "").join(`
 `);
   }
-  function _() {
+  function U() {
     return window.currentSessionId ?? null;
   }
-  async function b(n, s = {}) {
-    const r = se(), m = {
+  async function T(n, r = {}) {
+    const o = $e(), m = {
       "Content-Type": "application/json",
-      ...r ? { Authorization: `Bearer ${r}` } : {},
-      ...s.headers || {}
-    }, a = await fetch(oe(n), { ...s, headers: m });
-    if (!a.ok) {
-      const w = await a.text();
-      throw new Error(`${a.status}: ${w}`);
+      ...o ? { Authorization: `Bearer ${o}` } : {},
+      ...r.headers || {}
+    }, c = await fetch(Y(n), { ...r, headers: m });
+    if (!c.ok) {
+      const h = await c.text();
+      throw new Error(`${c.status}: ${h}`);
     }
-    return a.json();
+    return c.json();
   }
-  function Ie({ data: n }) {
-    const s = F(n), r = V(n), m = s.includes("Connected to"), a = s.includes("Error") || s.includes("failed");
+  const s = {
+    text: "var(--ant-color-text, CanvasText)",
+    secondaryText: "var(--ant-color-text-secondary, color-mix(in srgb, CanvasText 62%, transparent))",
+    border: "var(--ant-color-border, color-mix(in srgb, CanvasText 18%, transparent))",
+    bgContainer: "var(--ant-color-bg-container, Canvas)",
+    bgElevated: "var(--ant-color-bg-elevated, var(--ant-color-bg-container, Canvas))",
+    success: "var(--ant-color-success, #52c41a)",
+    successBorder: "var(--ant-color-success-border, var(--ant-color-success, #52c41a))",
+    successBg: "var(--ant-color-success-bg, transparent)",
+    error: "var(--ant-color-error, #ff4d4f)",
+    errorBorder: "var(--ant-color-error-border, var(--ant-color-error, #ff4d4f))",
+    errorBg: "var(--ant-color-error-bg, transparent)",
+    primary: "var(--ant-color-primary, #1677ff)",
+    primaryText: "var(--ant-color-white, #fff)",
+    shadow: "var(--ant-box-shadow-secondary, 0 8px 24px rgba(0, 0, 0, 0.18))"
+  };
+  function Ae({ data: n }) {
+    const r = ee(n), o = fe(n), m = r.includes("Connected to"), c = r.includes("Error") || r.includes("failed");
     return e.createElement(
-      L,
+      j,
       {
         size: "small",
         style: {
           marginTop: 8,
-          borderLeft: `3px solid ${m ? "#52c41a" : a ? "#ff4d4f" : "#1890ff"}`
+          borderLeft: `3px solid ${m ? "#52c41a" : c ? "#ff4d4f" : "#1890ff"}`
         }
       },
       e.createElement(
-        g,
+        x,
         { direction: "vertical", style: { width: "100%" } },
         e.createElement(
-          g,
+          x,
           null,
-          e.createElement(he || "🔗"),
-          e.createElement(E, { strong: !0 }, "Remote SSH Connect"),
-          r.host ? e.createElement(
-            U,
+          e.createElement(He || "🔗"),
+          e.createElement(C, { strong: !0 }, "Remote SSH Connect"),
+          o.host ? e.createElement(
+            re,
             { color: "blue" },
-            `${r.username}@${r.host}:${r.port || 22}`
+            `${o.username}@${o.host}:${o.port || 22}`
           ) : null
         ),
         e.createElement(
-          E,
+          C,
           {
-            type: a ? "danger" : "success",
+            type: c ? "danger" : "success",
             style: { whiteSpace: "pre-wrap" }
           },
-          s
+          r
         )
       )
     );
   }
-  function ke({ data: n }) {
-    const s = F(n), r = s.includes("Disconnected");
+  function Fe({ data: n }) {
+    const r = ee(n), o = r.includes("Disconnected");
     return e.createElement(
-      L,
+      j,
       {
         size: "small",
         style: {
           marginTop: 8,
-          borderLeft: `3px solid ${r ? "#52c41a" : "#faad14"}`
+          borderLeft: `3px solid ${o ? "#52c41a" : "#faad14"}`
         }
       },
       e.createElement(
-        g,
+        x,
         { direction: "vertical", style: { width: "100%" } },
         e.createElement(
-          g,
+          x,
           null,
-          e.createElement(ge || "🔌"),
-          e.createElement(E, { strong: !0 }, "Remote SSH Disconnect")
+          e.createElement(Oe || "🔌"),
+          e.createElement(C, { strong: !0 }, "Remote SSH Disconnect")
         ),
         e.createElement(
-          E,
+          C,
           { style: { whiteSpace: "pre-wrap" } },
-          s
+          r
         )
       )
     );
   }
-  function Pe({ data: n }) {
-    const s = F(n), r = s.includes("Active SSH connection");
+  function Je({ data: n }) {
+    const r = ee(n), o = r.includes("Active SSH connection");
     return e.createElement(
-      L,
+      j,
       {
         size: "small",
         style: {
           marginTop: 8,
-          borderLeft: `3px solid ${r ? "#52c41a" : "#d9d9d9"}`
+          borderLeft: `3px solid ${o ? "#52c41a" : "#d9d9d9"}`
         }
       },
       e.createElement(
-        g,
+        x,
         { direction: "vertical", style: { width: "100%" } },
         e.createElement(
-          g,
+          x,
           null,
-          e.createElement(K || "☁"),
-          e.createElement(E, { strong: !0 }, "Remote SSH Status"),
-          r ? e.createElement(B, {
+          e.createElement(ue || "☁"),
+          e.createElement(C, { strong: !0 }, "Remote SSH Status"),
+          o ? e.createElement(ne, {
             status: "success",
             text: "Connected"
-          }) : e.createElement(B, {
+          }) : e.createElement(ne, {
             status: "default",
             text: "Not Connected"
           })
         ),
         e.createElement(
-          E,
+          C,
           { style: { whiteSpace: "pre-wrap" } },
-          s
+          r
         )
       )
     );
   }
-  function Re({ data: n }) {
-    const s = F(n), r = V(n), m = s.includes("[remote:"), a = s.includes("failed with exit code");
+  function Me({ data: n }) {
+    const r = ee(n), o = fe(n), m = r.includes("[remote:"), c = r.includes("failed with exit code");
     return e.createElement(
-      L,
+      j,
       {
         size: "small",
         style: {
           marginTop: 8,
-          borderLeft: `3px solid ${a ? "#ff4d4f" : m ? "#722ed1" : "#d9d9d9"}`
+          borderLeft: `3px solid ${c ? "#ff4d4f" : m ? "#722ed1" : "#d9d9d9"}`
         }
       },
       e.createElement(
-        g,
+        x,
         { direction: "vertical", style: { width: "100%" } },
         e.createElement(
-          g,
+          x,
           null,
-          e.createElement(Ee || ">_"),
-          e.createElement(E, { strong: !0 }, "Remote Command"),
-          r.command ? e.createElement(
-            E,
+          e.createElement(Be || ">_"),
+          e.createElement(C, { strong: !0 }, "Remote Command"),
+          o.command ? e.createElement(
+            C,
             { code: !0, ellipsis: !0, style: { maxWidth: 400 } },
-            r.command
+            o.command
           ) : null
         ),
         e.createElement(
@@ -202,51 +223,82 @@ function ze() {
               wordBreak: "break-all"
             }
           },
-          s
+          r
         )
       )
     );
   }
-  function Te() {
-    const [n, s] = $([]), [r, m] = $(""), [a, w] = $(!1), [c, x] = $(!1), [y, u] = $(null), [P, v] = $(!1), [I, k] = $(null), [i] = R.useForm(), S = J(async () => {
-      w(!0);
+  function je() {
+    const [n, r] = k([]), [o, m] = k([]), [c, h] = k(""), [F, D] = k(!1), [d, _] = k(!1), [H, p] = k(!1), [S, O] = k(null), [y, b] = k(null), [g, Q] = k(!1), [q, i] = k(!1), [$, M] = k(null), [a] = E.useForm(), [w] = E.useForm(), l = me(async () => {
+      D(!0);
       try {
-        const t = _() || "", l = await b(
-          `/remote/profiles?session_id=${encodeURIComponent(t)}`
-        );
-        s(l.profiles || []), m(l.active_profile_id || "");
+        const t = U() || "", I = encodeURIComponent(t), [V, G] = await Promise.all([
+          T(`/remote/profiles?session_id=${I}`),
+          T("/remote/jump-hosts")
+        ]);
+        r(V.profiles || []), h(V.active_profile_id || ""), m(G.jump_hosts || []);
       } catch (t) {
-        console.error("[Remote] Failed to fetch profiles:", t);
+        console.error("[Remote] Failed to fetch data:", t);
       } finally {
-        w(!1);
+        D(!1);
       }
     }, []);
-    Q(() => {
-      S();
-      const t = setInterval(S, 1e4);
+    de(() => {
+      l();
+      const t = setInterval(l, 1e4);
       return () => clearInterval(t);
-    }, [S]);
-    const O = async (t) => {
-      v(!0);
+    }, [l]);
+    const u = async (t) => {
+      Q(!0);
       try {
-        await b(
-          y ? `/remote/profiles/${y.id}` : "/remote/profiles",
+        await T(
+          S ? `/remote/profiles/${S.id}` : "/remote/profiles",
+          {
+            method: S ? "PUT" : "POST",
+            body: JSON.stringify(t)
+          }
+        ), f.success(
+          S ? "Connection profile updated" : "Connection profile saved"
+        ), _(!1), O(null), a.resetFields(), l();
+      } catch (I) {
+        f.error(`Save failed: ${I.message}`);
+      } finally {
+        Q(!1);
+      }
+    }, P = () => {
+      O(null), a.resetFields(), _(!0);
+    }, J = (t) => {
+      O(t), a.setFieldsValue({
+        name: t.name,
+        host: t.host,
+        port: t.port,
+        username: t.username,
+        password: "",
+        key_path: t.key_path,
+        passphrase: "",
+        jump_host_id: t.jump_host_id || ""
+      }), _(!0);
+    }, B = async (t) => {
+      i(!0);
+      try {
+        await T(
+          y ? `/remote/jump-hosts/${y.id}` : "/remote/jump-hosts",
           {
             method: y ? "PUT" : "POST",
             body: JSON.stringify(t)
           }
         ), f.success(
-          y ? "Connection profile updated" : "Connection profile saved"
-        ), x(!1), u(null), i.resetFields(), S();
-      } catch (l) {
-        f.error(`Save failed: ${l.message}`);
+          y ? "Jump host updated" : "Jump host saved"
+        ), p(!1), b(null), w.resetFields(), l();
+      } catch (I) {
+        f.error(`Save jump host failed: ${I.message}`);
       } finally {
-        v(!1);
+        i(!1);
       }
-    }, A = () => {
-      u(null), i.resetFields(), x(!0);
-    }, H = (t) => {
-      u(t), i.setFieldsValue({
+    }, W = () => {
+      b(null), w.resetFields(), p(!0);
+    }, L = (t) => {
+      b(t), w.setFieldsValue({
         name: t.name,
         host: t.host,
         port: t.port,
@@ -254,49 +306,57 @@ function ze() {
         password: "",
         key_path: t.key_path,
         passphrase: ""
-      }), x(!0);
-    }, d = async (t) => {
-      const l = _();
-      if (!l) {
+      }), p(!0);
+    }, R = async (t) => {
+      try {
+        await T(`/remote/jump-hosts/${t}`, {
+          method: "DELETE"
+        }), f.success("Jump host deleted"), l();
+      } catch (I) {
+        f.error(`Delete jump host failed: ${I.message}`);
+      }
+    }, K = async (t) => {
+      const I = U();
+      if (!I) {
         f.error("No active session. Open a chat first.");
         return;
       }
-      if (t.id === r)
+      if (t.id === c)
         try {
-          await b(`/remote/connections/${l}`, {
+          await T(`/remote/connections/${I}`, {
             method: "DELETE"
-          }), f.success("Disconnected"), S();
-        } catch (T) {
-          f.error(`Disconnect failed: ${T.message}`);
+          }), f.success("Disconnected"), l();
+        } catch (G) {
+          f.error(`Disconnect failed: ${G.message}`);
         }
       else {
-        k(t.id);
+        M(t.id);
         try {
-          await b(`/remote/profiles/${t.id}/connect`, {
+          await T(`/remote/profiles/${t.id}/connect`, {
             method: "POST",
-            body: JSON.stringify({ session_id: l })
-          }), f.success(`Connected to ${t.name}`), S();
-        } catch (T) {
-          f.error(`Connection failed: ${T.message}`);
+            body: JSON.stringify({ session_id: I })
+          }), f.success(`Connected to ${t.name}`), l();
+        } catch (G) {
+          f.error(`Connection failed: ${G.message}`);
         } finally {
-          k(null);
+          M(null);
         }
       }
-    }, o = async (t) => {
+    }, se = async (t) => {
       try {
-        await b(`/remote/profiles/${t}`, {
+        await T(`/remote/profiles/${t}`, {
           method: "DELETE"
-        }), f.success("Profile deleted"), S();
-      } catch (l) {
-        f.error(`Delete failed: ${l.message}`);
+        }), f.success("Profile deleted"), l();
+      } catch (I) {
+        f.error(`Delete failed: ${I.message}`);
       }
-    }, p = (t) => t === r;
+    }, Ke = (t) => t === c;
     return e.createElement(
       "div",
       { style: { padding: 24, maxWidth: 900, margin: "0 auto" } },
       // Header
       e.createElement(
-        g,
+        x,
         {
           style: {
             marginBottom: 16,
@@ -305,65 +365,159 @@ function ze() {
           }
         },
         e.createElement(
-          ye,
+          ce,
           { level: 4, style: { margin: 0 } },
           "Remote SSH"
         ),
         e.createElement(
-          g,
+          x,
           null,
           e.createElement(
-            N,
-            { icon: e.createElement(we), onClick: S },
+            A,
+            { icon: e.createElement(ze), onClick: l },
             "Refresh"
           ),
           e.createElement(
-            N,
+            A,
+            {
+              icon: e.createElement(pe),
+              onClick: W
+            },
+            "New Jump Host"
+          ),
+          e.createElement(
+            A,
             {
               type: "primary",
-              icon: e.createElement(Se),
-              onClick: A
+              icon: e.createElement(pe),
+              onClick: P
             },
             "New Connection"
           )
         )
       ),
       // Info alert
-      e.createElement(ie, {
+      e.createElement(_e, {
         type: "info",
         showIcon: !0,
         style: { marginBottom: 16 },
         message: "Save connection profiles here. Toggle the switch to connect/disconnect. Only one connection can be active at a time. When connected, all shell commands in the current chat execute on the remote machine."
       }),
+      e.createElement(
+        j,
+        {
+          size: "small",
+          title: "Jump Hosts",
+          style: { marginBottom: 16 }
+        },
+        o.length === 0 ? e.createElement(
+          oe,
+          {
+            image: oe.PRESENTED_IMAGE_SIMPLE,
+            description: "No saved jump hosts."
+          }
+        ) : e.createElement(
+          le,
+          {
+            dataSource: o,
+            renderItem: (t) => e.createElement(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 0",
+                  borderBottom: "1px solid #f0f0f0"
+                }
+              },
+              e.createElement(
+                "div",
+                { style: { minWidth: 0 } },
+                e.createElement(
+                  C,
+                  { strong: !0 },
+                  t.name || `${t.username}@${t.host}`
+                ),
+                e.createElement(
+                  "div",
+                  { style: { marginTop: 4 } },
+                  e.createElement(
+                    C,
+                    { type: "secondary", style: { fontSize: 12 } },
+                    `${t.username}@${t.host}:${t.port}`,
+                    t.key_path ? `  |  Key: ${t.key_path}` : ""
+                  )
+                )
+              ),
+              e.createElement(
+                x,
+                null,
+                e.createElement(
+                  Z,
+                  { title: "Edit this jump host" },
+                  e.createElement(A, {
+                    type: "text",
+                    size: "small",
+                    icon: e.createElement(he),
+                    onClick: () => L(t)
+                  })
+                ),
+                e.createElement(
+                  ie,
+                  {
+                    title: "Delete this jump host?",
+                    onConfirm: () => R(t.id),
+                    okText: "Delete",
+                    cancelText: "Cancel",
+                    okButtonProps: { danger: !0 }
+                  },
+                  e.createElement(A, {
+                    type: "text",
+                    danger: !0,
+                    size: "small",
+                    icon: e.createElement(ye)
+                  })
+                )
+              )
+            )
+          }
+        )
+      ),
+      e.createElement(
+        ce,
+        { level: 5, style: { marginTop: 0 } },
+        "Devices"
+      ),
       // Profile list
-      a ? e.createElement(ce, {
+      F ? e.createElement(Te, {
         style: { display: "block", margin: "40px auto" }
       }) : n.length === 0 ? e.createElement(
-        L,
+        j,
         null,
         e.createElement(
-          ue,
+          oe,
           {
             description: e.createElement(
-              fe,
+              De,
               { type: "secondary" },
               "No saved connections. Click 'New Connection' to add one."
             )
           }
         )
       ) : e.createElement(
-        de,
+        le,
         {
           dataSource: n,
           renderItem: (t) => {
-            const l = p(t.id), h = I === t.id;
+            const I = Ke(t.id), V = $ === t.id;
             return e.createElement(
-              L,
+              j,
               {
                 size: "small",
                 style: {
                   marginBottom: 8,
-                  borderColor: l ? "#52c41a" : void 0
+                  borderColor: I ? "#52c41a" : void 0
                 }
               },
               e.createElement(
@@ -380,15 +534,15 @@ function ze() {
                   "div",
                   { style: { flex: 1, minWidth: 0 } },
                   e.createElement(
-                    g,
+                    x,
                     { align: "center" },
                     e.createElement(
-                      E,
+                      C,
                       { strong: !0, style: { fontSize: 14 } },
                       t.name || `${t.username}@${t.host}`
                     ),
-                    l ? e.createElement(
-                      U,
+                    I ? e.createElement(
+                      re,
                       { color: "success" },
                       "Connected"
                     ) : null
@@ -397,55 +551,56 @@ function ze() {
                     "div",
                     { style: { marginTop: 4 } },
                     e.createElement(
-                      E,
+                      C,
                       { type: "secondary", style: { fontSize: 12 } },
                       `${t.username}@${t.host}:${t.port}`,
-                      t.key_path ? `  |  Key: ${t.key_path}` : ""
+                      t.key_path ? `  |  Key: ${t.key_path}` : "",
+                      t.jump_host_name ? `  |  via ${t.jump_host_name}` : ""
                     )
                   )
                 ),
                 // Right: actions
                 e.createElement(
-                  g,
+                  x,
                   null,
-                  h ? e.createElement(ve, {
+                  V ? e.createElement(Le, {
                     style: { fontSize: 18 }
                   }) : e.createElement(
-                    M,
+                    Z,
                     {
-                      title: l ? "Disconnect" : "Connect to this device"
+                      title: I ? "Disconnect" : "Connect to this device"
                     },
-                    e.createElement(ae, {
-                      checked: l,
-                      onChange: () => d(t),
+                    e.createElement(Pe, {
+                      checked: I,
+                      onChange: () => K(t),
                       checkedChildren: "ON",
                       unCheckedChildren: "OFF"
                     })
                   ),
                   e.createElement(
-                    M,
+                    Z,
                     { title: "Edit this connection profile" },
-                    e.createElement(N, {
+                    e.createElement(A, {
                       type: "text",
                       size: "small",
-                      icon: e.createElement(be),
-                      onClick: () => H(t)
+                      icon: e.createElement(he),
+                      onClick: () => J(t)
                     })
                   ),
                   e.createElement(
-                    me,
+                    ie,
                     {
                       title: "Delete this connection profile?",
-                      onConfirm: () => o(t.id),
+                      onConfirm: () => se(t.id),
                       okText: "Delete",
                       cancelText: "Cancel",
                       okButtonProps: { danger: !0 }
                     },
-                    e.createElement(N, {
+                    e.createElement(A, {
                       type: "text",
                       danger: !0,
                       size: "small",
-                      icon: e.createElement(xe)
+                      icon: e.createElement(ye)
                     })
                   )
                 )
@@ -456,147 +611,252 @@ function ze() {
       ),
       // New Connection Modal
       e.createElement(
-        le,
+        ae,
         {
-          title: y ? "Edit SSH Connection" : "New SSH Connection",
-          open: c,
+          title: S ? "Edit SSH Connection" : "New SSH Connection",
+          open: d,
           onCancel: () => {
-            x(!1), u(null), i.resetFields();
+            _(!1), O(null), a.resetFields();
           },
           footer: null
         },
         e.createElement(
-          R,
-          { form: i, layout: "vertical", onFinish: O },
+          E,
+          { form: a, layout: "vertical", onFinish: u },
           e.createElement(
-            R.Item,
+            E.Item,
             { name: "name", label: "Display Name" },
-            e.createElement(D, {
+            e.createElement(z, {
               placeholder: "My Server (optional, auto-generated if empty)"
             })
           ),
           e.createElement(
-            R.Item,
+            E.Item,
             {
               name: "host",
               label: "Host",
               rules: [{ required: !0, message: "Please enter the host" }]
             },
-            e.createElement(D, {
+            e.createElement(z, {
               placeholder: "192.168.1.100 or example.com"
             })
           ),
           e.createElement(
-            g,
+            x,
             { style: { width: "100%" } },
             e.createElement(
-              R.Item,
+              E.Item,
               {
                 name: "port",
                 label: "Port",
                 initialValue: 22,
                 style: { width: 120 }
               },
-              e.createElement(D, { type: "number" })
+              e.createElement(z, { type: "number" })
             ),
             e.createElement(
-              R.Item,
+              E.Item,
               {
                 name: "username",
                 label: "Username",
                 initialValue: "root",
                 style: { flex: 1 }
               },
-              e.createElement(D)
+              e.createElement(z)
             )
           ),
           e.createElement(
-            R.Item,
+            E.Item,
             { name: "password", label: "Password" },
-            e.createElement(D.Password, {
-              placeholder: y ? "Leave empty to keep the saved password" : "Leave empty if using key auth"
+            e.createElement(z.Password, {
+              placeholder: S ? "Leave empty to keep the saved password" : "Leave empty if using key auth"
             })
           ),
           e.createElement(
-            R.Item,
+            E.Item,
             { name: "key_path", label: "SSH Key Path" },
-            e.createElement(D, {
+            e.createElement(z, {
               placeholder: "/home/user/.ssh/id_rsa (optional)"
             })
           ),
           e.createElement(
-            R.Item,
+            E.Item,
             { name: "passphrase", label: "Key Passphrase" },
-            e.createElement(D.Password, {
+            e.createElement(z.Password, {
+              placeholder: S ? "Leave empty to keep the saved passphrase" : "If key is encrypted"
+            })
+          ),
+          e.createElement(
+            E.Item,
+            { name: "jump_host_id", label: "Jump Host" },
+            e.createElement(ke, {
+              allowClear: !0,
+              placeholder: "Direct connection (no jump host)",
+              options: o.map((t) => ({
+                label: t.name || `${t.username}@${t.host}:${t.port}`,
+                value: t.id
+              }))
+            })
+          ),
+          e.createElement(
+            E.Item,
+            null,
+            e.createElement(
+              A,
+              {
+                type: "primary",
+                htmlType: "submit",
+                loading: g,
+                style: { width: "100%" }
+              },
+              S ? "Update Profile" : "Save Profile"
+            )
+          )
+        )
+      ),
+      e.createElement(
+        ae,
+        {
+          title: y ? "Edit Jump Host" : "New Jump Host",
+          open: H,
+          onCancel: () => {
+            p(!1), b(null), w.resetFields();
+          },
+          footer: null
+        },
+        e.createElement(
+          E,
+          { form: w, layout: "vertical", onFinish: B },
+          e.createElement(
+            E.Item,
+            { name: "name", label: "Display Name" },
+            e.createElement(z, {
+              placeholder: "Bastion (optional, auto-generated if empty)"
+            })
+          ),
+          e.createElement(
+            E.Item,
+            {
+              name: "host",
+              label: "Host",
+              rules: [{ required: !0, message: "Please enter the host" }]
+            },
+            e.createElement(z, {
+              placeholder: "bastion.example.com or 192.168.1.10"
+            })
+          ),
+          e.createElement(
+            x,
+            { style: { width: "100%" } },
+            e.createElement(
+              E.Item,
+              {
+                name: "port",
+                label: "Port",
+                initialValue: 22,
+                style: { width: 120 }
+              },
+              e.createElement(z, { type: "number" })
+            ),
+            e.createElement(
+              E.Item,
+              {
+                name: "username",
+                label: "Username",
+                initialValue: "root",
+                style: { flex: 1 }
+              },
+              e.createElement(z)
+            )
+          ),
+          e.createElement(
+            E.Item,
+            { name: "password", label: "Password" },
+            e.createElement(z.Password, {
+              placeholder: y ? "Leave empty to keep the saved password" : "Leave empty if using key auth"
+            })
+          ),
+          e.createElement(
+            E.Item,
+            { name: "key_path", label: "SSH Key Path" },
+            e.createElement(z, {
+              placeholder: "/home/user/.ssh/id_rsa (optional)"
+            })
+          ),
+          e.createElement(
+            E.Item,
+            { name: "passphrase", label: "Key Passphrase" },
+            e.createElement(z.Password, {
               placeholder: y ? "Leave empty to keep the saved passphrase" : "If key is encrypted"
             })
           ),
           e.createElement(
-            R.Item,
+            E.Item,
             null,
             e.createElement(
-              N,
+              A,
               {
                 type: "primary",
                 htmlType: "submit",
-                loading: P,
+                loading: q,
                 style: { width: "100%" }
               },
-              y ? "Update Profile" : "Save Profile"
+              y ? "Update Jump Host" : "Save Jump Host"
             )
           )
         )
       )
     );
   }
-  function Oe() {
-    const [n, s] = $(null), [r, m] = $([]), [a, w] = $(""), [c, x] = $(null), [y, u] = $(!1), [P, v] = $(""), I = J(async () => {
+  function Ue() {
+    const [n, r] = k(null), [o, m] = k([]), [c, h] = k(""), [F, D] = k(null), [d, _] = k(!1), [H, p] = k(""), S = me(async () => {
       try {
-        u(!0), v("");
-        const d = _() || "", o = encodeURIComponent(d), [p, t] = await Promise.all([
-          b(`/remote/connections?session_id=${o}`),
-          b(`/remote/profiles?session_id=${o}`)
-        ]), l = p.connections || [];
-        s(l.length > 0 ? l[0] : null), m(t.profiles || []), w(t.active_profile_id || "");
-      } catch (d) {
-        v(d.message), s(null);
+        _(!0), p("");
+        const i = U() || "", $ = encodeURIComponent(i), [M, a] = await Promise.all([
+          T(`/remote/connections?session_id=${$}`),
+          T(`/remote/profiles?session_id=${$}`)
+        ]), w = M.connections || [];
+        r(w.length > 0 ? w[0] : null), m(a.profiles || []), h(a.active_profile_id || "");
+      } catch (i) {
+        p(i.message), r(null);
       } finally {
-        u(!1);
+        _(!1);
       }
     }, []);
-    Q(() => {
-      I();
-      const d = setInterval(I, 5e3);
-      return () => clearInterval(d);
-    }, [I]);
-    const k = async (d) => {
-      const o = _();
-      if (!o) {
+    de(() => {
+      S();
+      const i = setInterval(S, 5e3);
+      return () => clearInterval(i);
+    }, [S]);
+    const O = async (i) => {
+      const $ = U();
+      if (!$) {
         f.error("No active session. Open a chat first.");
         return;
       }
-      const p = d.id === a;
-      x(d.id);
+      const M = i.id === c;
+      D(i.id);
       try {
-        p ? (await b(`/remote/connections/${o}`, {
+        M ? (await T(`/remote/connections/${$}`, {
           method: "DELETE"
-        }), f.success("Disconnected")) : (await b(`/remote/profiles/${d.id}/connect`, {
+        }), f.success("Disconnected")) : (await T(`/remote/profiles/${i.id}/connect`, {
           method: "POST",
-          body: JSON.stringify({ session_id: o })
-        }), f.success(`Connected to ${d.name}`)), I();
-      } catch (t) {
+          body: JSON.stringify({ session_id: $ })
+        }), f.success(`Connected to ${i.name}`)), S();
+      } catch (a) {
         f.error(
-          `${p ? "Disconnect" : "Connection"} failed: ${t.message}`
+          `${M ? "Disconnect" : "Connection"} failed: ${a.message}`
         );
       } finally {
-        x(null);
+        D(null);
       }
-    }, i = n !== null, S = (n == null ? void 0 : n.uptime_seconds) || 0;
-    let O = "";
-    i && (S < 60 ? O = `${S.toFixed(0)}s` : S < 3600 ? O = `${(S / 60).toFixed(0)}m` : O = `${(S / 3600).toFixed(1)}h`);
-    const A = e.createElement(
+    }, y = n !== null, b = (n == null ? void 0 : n.uptime_seconds) || 0;
+    let g = "";
+    y && (b < 60 ? g = `${b.toFixed(0)}s` : b < 3600 ? g = `${(b / 60).toFixed(0)}m` : g = `${(b / 3600).toFixed(1)}h`);
+    const Q = e.createElement(
       "button",
       {
+        id: "remote-ssh-header-status-react",
         type: "button",
         style: {
           height: 38,
@@ -607,19 +867,19 @@ function ze() {
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          border: `1px solid ${i ? "#b7eb8f" : "#d9d9d9"}`,
+          border: `1px solid ${y ? s.successBorder : s.border}`,
           borderRadius: 6,
-          background: i ? "#f6ffed" : "#fff",
-          color: i ? "#237804" : "#595959",
+          background: y ? s.successBg : s.bgContainer,
+          color: y ? s.success : s.text,
           font: "inherit",
           cursor: "pointer",
           whiteSpace: "nowrap",
           overflow: "hidden"
         },
-        "aria-label": i ? `SSH connected to ${n.username}@${n.host}` : "SSH disconnected"
+        "aria-label": y ? `SSH connected to ${n.username}@${n.host}` : "SSH disconnected"
       },
-      e.createElement(B, {
-        status: i ? "success" : P ? "error" : "default"
+      e.createElement(ne, {
+        status: y ? "success" : H ? "error" : "default"
       }),
       e.createElement(
         "span",
@@ -632,57 +892,57 @@ function ze() {
             fontWeight: 600
           }
         },
-        i ? `${n.username}@${n.host}` : y ? "SSH Checking" : "SSH Offline"
+        y ? `${n.username}@${n.host}` : d ? "SSH Checking" : "SSH Offline"
       )
-    ), H = e.createElement(
+    ), q = e.createElement(
       "div",
       { style: { width: 320 } },
       e.createElement(
-        g,
+        x,
         { direction: "vertical", size: 10, style: { width: "100%" } },
-        i ? e.createElement(
-          g,
+        y ? e.createElement(
+          x,
           { direction: "vertical", size: 6, style: { width: "100%" } },
           e.createElement(
-            g,
+            x,
             { align: "center" },
-            e.createElement(Ce || K || "span"),
-            e.createElement(E, { strong: !0 }, "SSH Connected")
+            e.createElement(Ne || ue || "span"),
+            e.createElement(C, { strong: !0 }, "SSH Connected")
           ),
           e.createElement(
-            E,
+            C,
             { code: !0, ellipsis: !0, style: { maxWidth: 296 } },
             `${n.username}@${n.host}:${n.port}`
           ),
           e.createElement(
-            g,
+            x,
             { size: 6 },
-            e.createElement($e || "span"),
-            e.createElement(E, { type: "secondary" }, O)
+            e.createElement(We || "span"),
+            e.createElement(C, { type: "secondary" }, g)
           )
         ) : e.createElement(
-          E,
-          { type: P ? "danger" : "secondary", style: { fontSize: 12 } },
-          P || "No active SSH connection for this chat."
+          C,
+          { type: H ? "danger" : "secondary", style: { fontSize: 12 } },
+          H || "No active SSH connection for this chat."
         ),
         e.createElement(
           "div",
-          { style: { borderTop: "1px solid #f0f0f0", paddingTop: 8 } },
-          e.createElement(E, { strong: !0 }, "Saved Devices")
+          { style: { borderTop: `1px solid ${s.border}`, paddingTop: 8 } },
+          e.createElement(C, { strong: !0 }, "Saved Devices")
         ),
-        r.length === 0 ? e.createElement(
-          E,
+        o.length === 0 ? e.createElement(
+          C,
           { type: "secondary", style: { fontSize: 12 } },
           "No saved devices. Add one from Remote SSH."
         ) : e.createElement(
-          g,
+          x,
           { direction: "vertical", size: 6, style: { width: "100%" } },
-          ...r.map((d) => {
-            const o = d.id === a;
+          ...o.map((i) => {
+            const $ = i.id === c;
             return e.createElement(
               "div",
               {
-                key: d.id,
+                key: i.id,
                 style: {
                   display: "flex",
                   alignItems: "center",
@@ -692,36 +952,67 @@ function ze() {
               },
               e.createElement(
                 "div",
-                { style: { minWidth: 0 } },
+                { style: { flex: 1, minWidth: 0, overflow: "hidden" } },
                 e.createElement(
-                  E,
-                  { strong: o, ellipsis: !0, style: { maxWidth: 190 } },
-                  d.name || `${d.username}@${d.host}`
+                  "div",
+                  {
+                    title: i.name || `${i.username}@${i.host}`,
+                    style: {
+                      color: s.text,
+                      fontSize: 14,
+                      fontWeight: $ ? 600 : 500,
+                      lineHeight: "20px",
+                      maxWidth: 200,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }
+                  },
+                  i.name || `${i.username}@${i.host}`
                 ),
                 e.createElement(
                   "div",
-                  null,
-                  e.createElement(
-                    E,
-                    {
-                      type: "secondary",
-                      ellipsis: !0,
-                      style: { maxWidth: 190, fontSize: 12 }
-                    },
-                    `${d.username}@${d.host}:${d.port}`
-                  )
-                )
+                  {
+                    title: `${i.username}@${i.host}:${i.port}`,
+                    style: {
+                      color: s.secondaryText,
+                      fontSize: 12,
+                      lineHeight: "18px",
+                      maxWidth: 200,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }
+                  },
+                  `${i.username}@${i.host}:${i.port}`
+                ),
+                i.jump_host_name ? e.createElement(
+                  "div",
+                  {
+                    title: `via ${i.jump_host_name}`,
+                    style: {
+                      color: s.secondaryText,
+                      fontSize: 12,
+                      lineHeight: "18px",
+                      maxWidth: 200,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }
+                  },
+                  `via ${i.jump_host_name}`
+                ) : null
               ),
               e.createElement(
-                N,
+                A,
                 {
                   size: "small",
-                  type: o ? "default" : "primary",
-                  danger: o,
-                  loading: c === d.id,
-                  onClick: () => k(d)
+                  type: $ ? "default" : "primary",
+                  danger: $,
+                  loading: F === i.id,
+                  onClick: () => O(i)
                 },
-                o ? "Disconnect" : "Connect"
+                $ ? "Disconnect" : "Connect"
               )
             );
           })
@@ -729,209 +1020,279 @@ function ze() {
       )
     );
     return e.createElement(
-      pe,
+      Re,
       {
-        content: H,
+        content: q,
         trigger: "click",
         placement: "bottom"
       },
-      e.createElement(M, {
-        title: i ? `${n.username}@${n.host}:${n.port}` : "No active SSH connection"
-      }, A)
+      e.createElement(Z, {
+        title: y ? `${n.username}@${n.host}:${n.port}` : "No active SSH connection"
+      }, Q)
     );
   }
-  function He() {
-    const n = window.QwenPaw, s = {
+  function Qe() {
+    const n = window.QwenPaw, r = {
       id: "remote-ssh-status",
       key: "remote-ssh-status",
       pluginId: "remote",
       label: "Remote SSH",
-      component: Oe,
+      component: Ue,
       priority: 15,
       placement: "left"
-    }, r = [
-      ["registerHeaderWidget", [s]],
-      ["registerTopBarItem", [s]],
-      ["registerNavWidget", [s]],
-      ["registerNavbarItem", [s]],
-      ["registerToolbarItem", [s]],
-      ["registerStatusWidget", [s]],
-      ["registerSlot", ["header:left", s]],
-      ["registerSlot", ["topbar:left", s]]
+    }, o = [
+      ["registerHeaderWidget", [r]],
+      ["registerTopBarItem", [r]],
+      ["registerNavWidget", [r]],
+      ["registerNavbarItem", [r]],
+      ["registerToolbarItem", [r]],
+      ["registerStatusWidget", [r]],
+      ["registerSlot", ["header:left", r]],
+      ["registerSlot", ["topbar:left", r]]
     ];
-    for (const [m, a] of r) {
-      const w = n == null ? void 0 : n[m];
-      if (typeof w == "function")
+    for (const [m, c] of o) {
+      const h = n == null ? void 0 : n[m];
+      if (typeof h == "function")
         try {
-          return w.apply(n, a), !0;
-        } catch (c) {
-          console.warn(`[Remote] ${m} failed:`, c);
+          return h.apply(n, c), !0;
+        } catch (F) {
+          console.warn(`[Remote] ${m} failed:`, F);
         }
     }
     return console.warn(
       "[Remote] No QwenPaw header extension API found; SSH status indicator was not registered."
     ), !1;
   }
-  function G() {
-    if (document.getElementById("remote-ssh-header-status")) return !0;
-    const s = Array.from(
+  function qe() {
+    const n = [
+      "[data-qwenpaw-header]",
+      "[data-app-header]",
+      ".qwenpaw-header",
+      ".app-header",
+      ".topbar",
+      ".top-bar",
+      ".navbar",
+      ".nav-bar",
+      ".ant-layout-header",
+      "header",
+      "nav"
+    ];
+    for (const o of n) {
+      const m = Array.from(
+        document.querySelectorAll(o)
+      );
+      for (const c of m) {
+        const h = c.getBoundingClientRect();
+        if (h.top >= 0 && h.top < 120 && h.width >= 320 && h.height >= 32 && h.height <= 120)
+          return c;
+      }
+    }
+    return Array.from(
+      document.querySelectorAll("div,section")
+    ).filter((o) => {
+      const m = o.getBoundingClientRect();
+      if (m.top < 0 || m.top >= 96 || m.width < 480 || m.height < 40 || m.height > 120)
+        return !1;
+      const c = window.getComputedStyle(o);
+      return c.display === "flex" || c.display === "grid" || c.alignItems === "center";
+    }).sort((o, m) => {
+      const c = o.getBoundingClientRect(), h = m.getBoundingClientRect();
+      return c.top - h.top || c.height - h.height;
+    })[0] || null;
+  }
+  function ge() {
+    const n = document.getElementById(
+      "remote-ssh-header-status"
+    );
+    if (n && n.dataset.remoteBuild !== te && n.remove(), document.getElementById("remote-ssh-header-status") || document.getElementById("remote-ssh-header-status-react")) return !0;
+    const o = [
+      "文档资料",
+      "Docs",
+      "Documentation",
+      "GitHub",
+      "代码",
+      "Code"
+    ], m = Array.from(
       document.querySelectorAll(
         "button,a,[role='button'],span,div"
       )
-    ).filter((o) => {
-      const p = (o.textContent || "").trim(), t = o.getBoundingClientRect();
-      return t.top >= 0 && t.top < 96 && t.width > 0 && t.width < 320 && t.height > 0 && (p.includes("文档资料") || p.includes("GitHub") || p.includes("代码"));
-    }), m = Array.from(
+    ).filter((a) => {
+      const w = (a.textContent || "").trim(), l = a.getBoundingClientRect();
+      return l.top >= 0 && l.top < 96 && l.width > 0 && l.width < 320 && l.height > 0 && o.some((u) => w.includes(u));
+    }), h = Array.from(
       new Set(
-        s.map(
-          (o) => o.closest("button,a,[role='button']") || o
+        m.map(
+          (a) => a.closest("button,a,[role='button']") || a
         )
       )
-    ).sort((o, p) => {
-      const t = (l) => {
-        const h = (l.textContent || "").trim(), T = l.getBoundingClientRect();
-        return (h === "文档资料" || h === "GitHub" || h === "代码" ? 0 : 1e4) + T.width * T.height;
+    ).sort((a, w) => {
+      const l = (u) => {
+        const P = (u.textContent || "").trim(), J = u.getBoundingClientRect();
+        return (o.includes(P) ? 0 : 1e4) + J.width * J.height;
       };
-      return t(o) - t(p);
-    })[0], a = m == null ? void 0 : m.parentElement;
-    if (!m || !a)
+      return l(a) - l(w);
+    })[0], F = (h == null ? void 0 : h.parentElement) || qe();
+    if (!F)
       return console.warn("[Remote] Header DOM mount point not found."), !1;
-    const w = document.createElement("div");
-    w.id = "remote-ssh-header-status", w.style.display = "inline-flex", w.style.alignItems = "center", w.style.margin = "0 8px";
-    const c = document.createElement("button");
-    c.type = "button", c.style.height = "38px", c.style.minWidth = "156px", c.style.maxWidth = "220px", c.style.padding = "0 12px", c.style.display = "inline-flex", c.style.alignItems = "center", c.style.justifyContent = "center", c.style.gap = "8px", c.style.border = "1px solid #d9d9d9", c.style.borderRadius = "6px", c.style.background = "#fff", c.style.color = "#595959", c.style.font = "inherit", c.style.cursor = "pointer", c.style.whiteSpace = "nowrap";
-    const x = document.createElement("span");
-    x.style.width = "8px", x.style.height = "8px", x.style.borderRadius = "50%", x.style.background = "#bfbfbf", x.style.flex = "0 0 auto";
-    const y = document.createElement("span");
-    y.textContent = "SSH Offline", y.style.minWidth = "0", y.style.overflow = "hidden", y.style.textOverflow = "ellipsis", y.style.fontSize = "14px", y.style.fontWeight = "600";
-    const u = document.createElement("div");
-    u.style.position = "fixed", u.style.zIndex = "10000", u.style.width = "320px", u.style.padding = "12px", u.style.border = "1px solid #d9d9d9", u.style.borderRadius = "8px", u.style.background = "#fff", u.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.12)", u.style.display = "none";
-    const P = document.createElement("div");
-    P.style.fontWeight = "600", P.style.marginBottom = "8px";
-    const v = document.createElement("div");
-    v.style.fontSize = "12px", v.style.color = "#595959", v.style.wordBreak = "break-all";
-    const I = document.createElement("div");
-    I.textContent = "Saved Devices", I.style.marginTop = "10px", I.style.paddingTop = "10px", I.style.borderTop = "1px solid #f0f0f0", I.style.fontWeight = "600";
-    const k = document.createElement("div");
-    k.style.display = "flex", k.style.flexDirection = "column", k.style.gap = "6px", k.style.marginTop = "8px";
-    const i = document.createElement("button");
-    i.type = "button", i.textContent = "Disconnect", i.style.marginTop = "10px", i.style.height = "28px", i.style.padding = "0 10px", i.style.border = "1px solid #ffccc7", i.style.borderRadius = "4px", i.style.background = "#fff", i.style.color = "#cf1322", i.style.cursor = "pointer", i.style.display = "none", u.append(P, v, i, I, k), c.append(x, y), w.append(c, u), a.insertBefore(w, m);
-    let S = null;
-    const O = (o, p) => {
-      if (k.replaceChildren(), o.length === 0) {
-        const t = document.createElement("div");
-        t.textContent = "No saved devices. Add one from Remote SSH.", t.style.color = "#8c8c8c", t.style.fontSize = "12px", k.append(t);
+    const D = document.createElement("div");
+    D.id = "remote-ssh-header-status", D.dataset.remoteBuild = te, D.style.display = "inline-flex", D.style.alignItems = "center", D.style.margin = "0 8px";
+    const d = document.createElement("button");
+    d.type = "button", d.style.height = "38px", d.style.minWidth = "156px", d.style.maxWidth = "220px", d.style.padding = "0 12px", d.style.display = "inline-flex", d.style.alignItems = "center", d.style.justifyContent = "center", d.style.gap = "8px", d.style.border = `1px solid ${s.border}`, d.style.borderRadius = "6px", d.style.background = s.bgContainer, d.style.color = s.text, d.style.font = "inherit", d.style.cursor = "pointer", d.style.whiteSpace = "nowrap";
+    const _ = document.createElement("span");
+    _.style.width = "8px", _.style.height = "8px", _.style.borderRadius = "50%", _.style.background = s.secondaryText, _.style.flex = "0 0 auto";
+    const H = document.createElement("span");
+    H.textContent = "SSH Offline", H.style.minWidth = "0", H.style.overflow = "hidden", H.style.textOverflow = "ellipsis", H.style.fontSize = "14px", H.style.fontWeight = "600";
+    const p = document.createElement("div");
+    p.style.position = "fixed", p.style.zIndex = "10000", p.style.width = "320px", p.style.padding = "12px", p.style.border = `1px solid ${s.border}`, p.style.borderRadius = "8px", p.style.background = s.bgElevated, p.style.color = s.text, p.style.boxShadow = s.shadow, p.style.display = "none";
+    const S = document.createElement("div");
+    S.style.fontWeight = "600", S.style.marginBottom = "8px";
+    const O = document.createElement("div");
+    O.style.fontSize = "12px", O.style.color = s.secondaryText, O.style.wordBreak = "break-all";
+    const y = document.createElement("div");
+    y.textContent = "Saved Devices", y.style.marginTop = "10px", y.style.paddingTop = "10px", y.style.borderTop = `1px solid ${s.border}`, y.style.fontWeight = "600";
+    const b = document.createElement("div");
+    b.style.display = "flex", b.style.flexDirection = "column", b.style.gap = "6px", b.style.marginTop = "8px";
+    const g = document.createElement("button");
+    g.type = "button", g.textContent = "Disconnect", g.style.marginTop = "10px", g.style.height = "28px", g.style.padding = "0 10px", g.style.border = `1px solid ${s.errorBorder}`, g.style.borderRadius = "4px", g.style.background = s.bgElevated, g.style.color = s.error, g.style.cursor = "pointer", g.style.display = "none", p.append(S, O, g, y, b), d.append(_, H), D.append(d, p), h && h.parentElement === F ? F.insertBefore(D, h) : F.appendChild(D);
+    let Q = null;
+    const q = (a, w) => {
+      if (b.replaceChildren(), a.length === 0) {
+        const l = document.createElement("div");
+        l.textContent = "No saved devices. Add one from Remote SSH.", l.style.color = s.secondaryText, l.style.fontSize = "12px", b.append(l);
         return;
       }
-      for (const t of o) {
-        const l = t.id === p, h = document.createElement("div");
-        h.style.display = "flex", h.style.alignItems = "center", h.style.justifyContent = "space-between", h.style.gap = "8px";
-        const T = document.createElement("div");
-        T.style.minWidth = "0";
-        const z = document.createElement("div");
-        z.textContent = t.name || `${t.username}@${t.host}`, z.style.fontWeight = l ? "600" : "400", z.style.overflow = "hidden", z.style.textOverflow = "ellipsis", z.style.whiteSpace = "nowrap";
+      for (const l of a) {
+        const u = l.id === w, P = document.createElement("div");
+        P.style.display = "flex", P.style.alignItems = "center", P.style.justifyContent = "space-between", P.style.gap = "8px";
+        const J = document.createElement("div");
+        J.style.flex = "1", J.style.minWidth = "0", J.style.overflow = "hidden";
+        const B = document.createElement("div");
+        B.textContent = l.name || `${l.username}@${l.host}`, B.title = B.textContent, B.style.color = s.text, B.style.fontSize = "14px", B.style.fontWeight = u ? "600" : "500", B.style.lineHeight = "20px", B.style.maxWidth = "200px", B.style.overflow = "hidden", B.style.textOverflow = "ellipsis", B.style.whiteSpace = "nowrap";
         const W = document.createElement("div");
-        W.textContent = `${t.username}@${t.host}:${t.port}`, W.style.color = "#8c8c8c", W.style.fontSize = "12px", W.style.overflow = "hidden", W.style.textOverflow = "ellipsis", W.style.whiteSpace = "nowrap";
-        const C = document.createElement("button");
-        C.type = "button", C.textContent = l ? "Disconnect" : "Connect", C.style.height = "28px", C.style.padding = "0 10px", C.style.border = l ? "1px solid #ffccc7" : "1px solid #1677ff", C.style.borderRadius = "4px", C.style.background = l ? "#fff" : "#1677ff", C.style.color = l ? "#cf1322" : "#fff", C.style.cursor = "pointer", C.addEventListener("click", async () => {
-          const j = _();
-          if (!j) {
+        W.textContent = `${l.username}@${l.host}:${l.port}`, W.title = W.textContent, W.style.color = s.secondaryText, W.style.fontSize = "12px", W.style.lineHeight = "18px", W.style.maxWidth = "200px", W.style.overflow = "hidden", W.style.textOverflow = "ellipsis", W.style.whiteSpace = "nowrap";
+        const L = document.createElement("div");
+        L.textContent = l.jump_host_name ? `via ${l.jump_host_name}` : "", L.title = L.textContent, L.style.color = s.secondaryText, L.style.fontSize = "12px", L.style.lineHeight = "18px", L.style.maxWidth = "200px", L.style.overflow = "hidden", L.style.textOverflow = "ellipsis", L.style.whiteSpace = "nowrap", L.style.display = l.jump_host_name ? "" : "none";
+        const R = document.createElement("button");
+        R.type = "button", R.textContent = u ? "Disconnect" : "Connect", R.style.height = "28px", R.style.padding = "0 10px", R.style.border = u ? `1px solid ${s.errorBorder}` : `1px solid ${s.primary}`, R.style.borderRadius = "4px", R.style.background = u ? s.bgElevated : s.primary, R.style.color = u ? s.error : s.primaryText, R.style.cursor = "pointer", R.addEventListener("click", async () => {
+          const K = U();
+          if (!K) {
             f.error("No active session. Open a chat first.");
             return;
           }
-          C.disabled = !0, C.textContent = l ? "Disconnecting" : "Connecting";
+          R.disabled = !0, R.textContent = u ? "Disconnecting" : "Connecting";
           try {
-            l ? (await b(`/remote/connections/${j}`, {
+            u ? (await T(`/remote/connections/${K}`, {
               method: "DELETE"
-            }), f.success("Disconnected")) : (await b(`/remote/profiles/${t.id}/connect`, {
+            }), f.success("Disconnected")) : (await T(`/remote/profiles/${l.id}/connect`, {
               method: "POST",
-              body: JSON.stringify({ session_id: j })
-            }), f.success(`Connected to ${t.name}`)), await H();
-          } catch (_e) {
+              body: JSON.stringify({ session_id: K })
+            }), f.success(`Connected to ${l.name}`)), await $();
+          } catch (se) {
             f.error(
-              `${l ? "Disconnect" : "Connection"} failed: ${_e.message}`
+              `${u ? "Disconnect" : "Connection"} failed: ${se.message}`
             );
           } finally {
-            C.disabled = !1;
+            R.disabled = !1;
           }
-        }), T.append(z, W), h.append(T, C), k.append(h);
+        }), J.append(B, W, L), P.append(J, R), b.append(P);
       }
-    }, A = (o, p = [], t = "", l = "") => {
-      if (S = o, o) {
-        const h = `${o.username}@${o.host}:${o.port}`;
-        c.style.borderColor = "#b7eb8f", c.style.background = "#f6ffed", c.style.color = "#237804", x.style.background = "#52c41a", y.textContent = `${o.username}@${o.host}`, c.title = h, P.textContent = "SSH Connected", v.textContent = `${h}
+    }, i = (a, w = [], l = "", u = "") => {
+      if (Q = a, a) {
+        const P = `${a.username}@${a.host}:${a.port}`;
+        d.style.borderColor = s.successBorder, d.style.background = s.successBg, d.style.color = s.success, _.style.background = s.success, H.textContent = `${a.username}@${a.host}`, d.title = P, S.textContent = "SSH Connected", O.textContent = `${P}
 Uptime: ${Math.round(
-          o.uptime_seconds || 0
+          a.uptime_seconds || 0
         )}s
-Work Dir: ${o.default_cwd || "/"}`, v.style.whiteSpace = "pre-line", i.style.display = "";
+Work Dir: ${a.default_cwd || "/"}`, O.style.whiteSpace = "pre-line", g.style.display = "";
       } else
-        c.style.borderColor = l ? "#ffccc7" : "#d9d9d9", c.style.background = "#fff", c.style.color = l ? "#cf1322" : "#595959", x.style.background = l ? "#ff4d4f" : "#bfbfbf", y.textContent = l ? "SSH Error" : "SSH Offline", c.title = l || "No active SSH connection", P.textContent = l ? "SSH Status Error" : "SSH Offline", v.textContent = l || "No active SSH connection for this chat.", v.style.whiteSpace = "normal", i.style.display = "none";
-      O(p, t);
-    }, H = async () => {
+        d.style.borderColor = u ? s.errorBorder : s.border, d.style.background = u ? s.errorBg : s.bgContainer, d.style.color = u ? s.error : s.text, _.style.background = u ? s.error : s.secondaryText, H.textContent = u ? "SSH Error" : "SSH Offline", d.title = u || "No active SSH connection", S.textContent = u ? "SSH Status Error" : "SSH Offline", O.textContent = u || "No active SSH connection for this chat.", O.style.whiteSpace = "normal", g.style.display = "none";
+      q(w, l);
+    }, $ = async () => {
       try {
-        const o = _() || "", p = encodeURIComponent(o), [t, l] = await Promise.all([
-          b(`/remote/connections?session_id=${p}`),
-          b(`/remote/profiles?session_id=${p}`)
-        ]), h = t.connections || [];
-        A(
-          h.length > 0 ? h[0] : null,
-          l.profiles || [],
-          l.active_profile_id || ""
+        const a = U() || "", w = encodeURIComponent(a), [l, u] = await Promise.all([
+          T(`/remote/connections?session_id=${w}`),
+          T(`/remote/profiles?session_id=${w}`)
+        ]), P = l.connections || [];
+        i(
+          P.length > 0 ? P[0] : null,
+          u.profiles || [],
+          u.active_profile_id || ""
         );
-      } catch (o) {
-        A(null, [], "", o.message || "Failed to load SSH status.");
+      } catch (a) {
+        i(null, [], "", a.message || "Failed to load SSH status.");
       }
-    }, d = () => {
-      const o = c.getBoundingClientRect();
-      u.style.top = `${o.bottom + 8}px`, u.style.left = `${Math.min(
-        o.left,
+    }, M = () => {
+      const a = d.getBoundingClientRect();
+      p.style.top = `${a.bottom + 8}px`, p.style.left = `${Math.min(
+        a.left,
         window.innerWidth - 340
       )}px`;
     };
-    return c.addEventListener("click", () => {
-      d(), u.style.display = u.style.display === "none" ? "block" : "none";
-    }), document.addEventListener("click", (o) => {
-      w.contains(o.target) || (u.style.display = "none");
-    }), i.addEventListener("click", async () => {
-      const o = _();
-      if (!(!o || !S))
+    return d.addEventListener("click", () => {
+      M(), p.style.display = p.style.display === "none" ? "block" : "none";
+    }), document.addEventListener("click", (a) => {
+      D.contains(a.target) || (p.style.display = "none");
+    }), g.addEventListener("click", async () => {
+      const a = U();
+      if (!(!a || !Q))
         try {
-          await b(`/remote/connections/${o}`, {
+          await T(`/remote/connections/${a}`, {
             method: "DELETE"
-          }), f.success("Disconnected"), await H();
-        } catch (p) {
-          f.error(`Disconnect failed: ${p.message}`);
+          }), f.success("Disconnected"), await $();
+        } catch (w) {
+          f.error(`Disconnect failed: ${w.message}`);
         }
-    }), H(), window.setInterval(H, 5e3), !0;
+    }), $(), window.setInterval($, 5e3), !0;
   }
-  function De() {
-    if (G()) return;
+  function Ee() {
+    if (ge()) return;
     let n = 0;
-    const s = 40;
-    let r = null;
+    const r = 40;
+    let o = null;
     const m = () => {
-      if (n += 1, G()) {
-        r == null || r.disconnect(), window.clearInterval(a);
+      if (n += 1, ge()) {
+        o == null || o.disconnect(), window.clearInterval(c);
         return;
       }
-      n >= s && (r == null || r.disconnect(), window.clearInterval(a));
-    }, a = window.setInterval(m, 250);
-    r = new MutationObserver(m), r.observe(document.body, { childList: !0, subtree: !0 });
+      n >= r && (o == null || o.disconnect(), window.clearInterval(c));
+    }, c = window.setInterval(m, 250);
+    o = new MutationObserver(m), o.observe(document.body, { childList: !0, subtree: !0 });
   }
-  (X = (q = window.QwenPaw).registerToolRender) == null || X.call(q, "remote", {
-    remote_connect: Ie,
-    remote_disconnect: ke,
-    remote_list: Pe,
-    remote_exec: Re
-  }), (Z = (Y = window.QwenPaw).registerRoutes) == null || Z.call(Y, "remote", [
+  (xe = (we = window.QwenPaw).registerToolRender) == null || xe.call(we, "remote", {
+    remote_connect: Ae,
+    remote_disconnect: Fe,
+    remote_list: Je,
+    remote_exec: Me
+  }), (Se = (ve = window.QwenPaw).registerRoutes) == null || Se.call(ve, "remote", [
     {
       path: "/remote",
-      component: Te,
+      component: je,
       label: "Remote SSH",
       icon: "🔗",
       priority: 20
     }
-  ]), He() || De();
+  ]), Qe() ? window.setTimeout(Ee, 750) : Ee();
 }
-var ee;
-(ee = window.QwenPaw) != null && ee.host ? ze() : console.warn("[Remote] QwenPaw.host not available, plugin not loaded");
+function Ce() {
+  var e, N;
+  const v = (e = window.QwenPaw) == null ? void 0 : e.host;
+  return !!(v != null && v.React && (v != null && v.antd) && (v != null && v.getApiUrl) && (v != null && v.getApiToken) && ((N = window.QwenPaw) != null && N.registerRoutes));
+}
+function Ve() {
+  if (Ce()) {
+    be();
+    return;
+  }
+  let v = 0;
+  const e = 120;
+  let N = null;
+  const X = () => {
+    if (v += 1, Ce()) {
+      N == null || N.disconnect(), window.clearInterval(Y), be();
+      return;
+    }
+    v >= e && (N == null || N.disconnect(), window.clearInterval(Y), console.warn("[Remote] QwenPaw.host not available, plugin not loaded"));
+  }, Y = window.setInterval(X, 250);
+  document.body && (N = new MutationObserver(X), N.observe(document.body, { childList: !0, subtree: !0 }));
+}
+Ve();

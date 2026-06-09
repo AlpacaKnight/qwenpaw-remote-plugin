@@ -8,10 +8,15 @@ from pydantic import BaseModel, Field
 
 from ..ssh_manager import get_ssh_manager
 from ..store import (
+    create_jump_host,
     create_profile,
+    delete_jump_host,
     delete_profile,
+    get_jump_host,
     get_profile,
+    list_jump_hosts,
     list_profiles,
+    update_jump_host,
     update_profile,
 )
 
@@ -42,6 +47,18 @@ class ConnectRequest(BaseModel):
     profile_id: str = Field(
         default="", description="Saved connection profile ID"
     )
+    jump_host_id: str = Field(default="", description="Saved jump host ID")
+    jump_name: str = Field(default="", description="Saved jump host name")
+    jump_host: str = Field(default="", description="Inline jump host")
+    jump_port: int = Field(default=22, ge=1, le=65535, description="Jump SSH port")
+    jump_username: str = Field(default="", description="Jump SSH username")
+    jump_password: str = Field(default="", description="Jump SSH password")
+    jump_key_path: str = Field(
+        default="", description="Path to jump host SSH private key file"
+    )
+    jump_passphrase: str = Field(
+        default="", description="Passphrase for the jump host private key"
+    )
 
 
 class ProfileRequest(BaseModel):
@@ -49,6 +66,23 @@ class ProfileRequest(BaseModel):
 
     name: str = Field(default="", description="Display name")
     host: str = Field(..., description="Remote host IP or hostname")
+    port: int = Field(default=22, ge=1, le=65535, description="SSH port")
+    username: str = Field(default="root", description="SSH username")
+    password: str = Field(default="", description="SSH password")
+    key_path: str = Field(
+        default="", description="Path to SSH private key file"
+    )
+    passphrase: str = Field(
+        default="", description="Passphrase for the private key"
+    )
+    jump_host_id: str = Field(default="", description="Saved jump host ID")
+
+
+class JumpHostRequest(BaseModel):
+    """Request body for creating a saved SSH jump host."""
+
+    name: str = Field(default="", description="Display name")
+    host: str = Field(..., description="Jump host IP or hostname")
     port: int = Field(default=22, ge=1, le=65535, description="SSH port")
     username: str = Field(default="root", description="SSH username")
     password: str = Field(default="", description="SSH password")
@@ -73,6 +107,26 @@ class ExecRequest(BaseModel):
 # --------------- Endpoints ---------------
 
 
+def _sanitize_secret_fields(item: dict) -> dict:
+    response = dict(item)
+    response.pop("password", None)
+    response.pop("passphrase", None)
+    return response
+
+
+def _jump_host_name_map() -> dict[str, str]:
+    return {
+        str(jump_host.get("id", "")): str(jump_host.get("name", ""))
+        for jump_host in list_jump_hosts()
+    }
+
+
+def _validate_profile_jump_host(profile: dict) -> None:
+    jump_host_id = str(profile.get("jump_host_id", "")).strip()
+    if jump_host_id and get_jump_host(jump_host_id) is None:
+        raise ValueError(f"jump host not found: {jump_host_id}")
+
+
 @router.get("/connections")
 async def list_connections(session_id: Optional[str] = None):
     """List SSH connections, optionally filtered by session_id."""
@@ -93,6 +147,7 @@ async def list_connections(session_id: Optional[str] = None):
 async def get_profiles(session_id: Optional[str] = None):
     """List saved SSH profiles with current connection state."""
     profiles = list_profiles()
+    jump_host_names = _jump_host_name_map()
     active_profile_id = ""
     if session_id:
         conn = get_ssh_manager().get_connection(session_id)
@@ -104,6 +159,10 @@ async def get_profiles(session_id: Optional[str] = None):
         item["connected"] = bool(
             active_profile_id and item.get("id") == active_profile_id
         )
+        item["jump_host_name"] = jump_host_names.get(
+            str(item.get("jump_host_id", "")),
+            "",
+        )
         item.pop("password", None)
         item.pop("passphrase", None)
         result.append(item)
@@ -114,25 +173,84 @@ async def get_profiles(session_id: Optional[str] = None):
     }
 
 
-@router.post("/profiles")
-async def create_profile_route(req: ProfileRequest):
-    """Create and persist an SSH profile."""
+@router.get("/jump-hosts")
+async def get_jump_hosts():
+    """List saved SSH jump hosts."""
+    return {
+        "jump_hosts": [
+            _sanitize_secret_fields(jump_host)
+            for jump_host in list_jump_hosts()
+        ]
+    }
+
+
+@router.post("/jump-hosts")
+async def create_jump_host_route(req: JumpHostRequest):
+    """Create and persist an SSH jump host."""
     try:
-        profile = create_profile(req.model_dump())
+        jump_host = create_jump_host(req.model_dump())
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    response = dict(profile)
-    response.pop("password", None)
-    response.pop("passphrase", None)
-    return response
+    return _sanitize_secret_fields(jump_host)
+
+
+@router.put("/jump-hosts/{jump_host_id}")
+async def update_jump_host_route(jump_host_id: str, req: JumpHostRequest):
+    """Update a persisted SSH jump host."""
+    try:
+        jump_host = update_jump_host(jump_host_id, req.model_dump())
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if jump_host is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Jump host not found: {jump_host_id}",
+        )
+
+    await get_ssh_manager().disconnect_jump_host(jump_host_id)
+
+    return _sanitize_secret_fields(jump_host)
+
+
+@router.delete("/jump-hosts/{jump_host_id}")
+async def delete_jump_host_route(jump_host_id: str):
+    """Delete a persisted SSH jump host."""
+    try:
+        deleted = delete_jump_host(jump_host_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Jump host not found: {jump_host_id}",
+        )
+    await get_ssh_manager().disconnect_jump_host(jump_host_id)
+    return {"status": "ok", "jump_host_id": jump_host_id}
+
+
+@router.post("/profiles")
+async def create_profile_route(req: ProfileRequest):
+    """Create and persist an SSH profile."""
+    payload = req.model_dump()
+    try:
+        _validate_profile_jump_host(payload)
+        profile = create_profile(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _sanitize_secret_fields(profile)
 
 
 @router.put("/profiles/{profile_id}")
 async def update_profile_route(profile_id: str, req: ProfileRequest):
     """Update a persisted SSH profile."""
+    payload = req.model_dump()
     try:
-        profile = update_profile(profile_id, req.model_dump())
+        _validate_profile_jump_host(payload)
+        profile = update_profile(profile_id, payload)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -144,10 +262,7 @@ async def update_profile_route(profile_id: str, req: ProfileRequest):
 
     await get_ssh_manager().disconnect_profile(profile_id)
 
-    response = dict(profile)
-    response.pop("password", None)
-    response.pop("passphrase", None)
-    return response
+    return _sanitize_secret_fields(profile)
 
 
 @router.delete("/profiles/{profile_id}")
@@ -179,6 +294,9 @@ async def connect_profile(profile_id: str, body: dict):
 
     manager = get_ssh_manager()
     try:
+        jump_host_id = str(profile.get("jump_host_id", ""))
+        if jump_host_id and get_jump_host(jump_host_id) is None:
+            raise ValueError(f"jump host not found: {jump_host_id}")
         info = await manager.connect(
             session_id=session_id,
             host=str(profile.get("host", "")),
@@ -188,6 +306,7 @@ async def connect_profile(profile_id: str, body: dict):
             key_path=str(profile.get("key_path", "")),
             passphrase=str(profile.get("passphrase", "")),
             profile_id=profile_id,
+            jump_host_id=jump_host_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -213,6 +332,14 @@ async def create_connection(req: ConnectRequest):
             key_path=req.key_path,
             passphrase=req.passphrase,
             profile_id=req.profile_id,
+            jump_host_id=req.jump_host_id,
+            jump_name=req.jump_name,
+            jump_host=req.jump_host,
+            jump_port=req.jump_port,
+            jump_username=req.jump_username,
+            jump_password=req.jump_password,
+            jump_key_path=req.jump_key_path,
+            jump_passphrase=req.jump_passphrase,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -28,7 +28,7 @@ cp plugin.json plugin.py requirements.txt context.py ssh_manager.py shell_wrappe
 cp -R routers tools "$STAGING/"
 
 mkdir -p "$STAGING/ui/dist"
-cp "ui/dist/index.js" "$STAGING/ui/dist/index.js"
+cp ui/dist/* "$STAGING/ui/dist/"
 
 find "$STAGING" -type d -name "__pycache__" -prune -exec rm -rf {} +
 find "$STAGING" -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete

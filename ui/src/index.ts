@@ -8,7 +8,14 @@
  * Uses window.QwenPaw plugin API
  */
 
+const REMOTE_PLUGIN_BUILD_ID = "0.1.2-jump-host-status-theme";
+
 function buildPlugin() {
+  const runtime = window as any;
+  if (runtime.__remotePluginInitializedBuild === REMOTE_PLUGIN_BUILD_ID) return;
+  runtime.__remotePluginInitialized = true;
+  runtime.__remotePluginInitializedBuild = REMOTE_PLUGIN_BUILD_ID;
+
   const { React, antd, antdIcons, getApiUrl, getApiToken } = (window as any)
     .QwenPaw.host;
   const {
@@ -18,6 +25,7 @@ function buildPlugin() {
     Space,
     Button,
     Input,
+    Select,
     Form,
     Modal,
     Spin,
@@ -89,6 +97,31 @@ function buildPlugin() {
     }
     return res.json();
   }
+
+  const theme = {
+    text: "var(--ant-color-text, CanvasText)",
+    secondaryText:
+      "var(--ant-color-text-secondary, color-mix(in srgb, CanvasText 62%, transparent))",
+    border:
+      "var(--ant-color-border, color-mix(in srgb, CanvasText 18%, transparent))",
+    bgContainer: "var(--ant-color-bg-container, Canvas)",
+    bgElevated:
+      "var(--ant-color-bg-elevated, var(--ant-color-bg-container, Canvas))",
+    fillSecondary:
+      "var(--ant-color-fill-secondary, color-mix(in srgb, CanvasText 8%, transparent))",
+    success: "var(--ant-color-success, #52c41a)",
+    successBorder:
+      "var(--ant-color-success-border, var(--ant-color-success, #52c41a))",
+    successBg: "var(--ant-color-success-bg, transparent)",
+    error: "var(--ant-color-error, #ff4d4f)",
+    errorBorder:
+      "var(--ant-color-error-border, var(--ant-color-error, #ff4d4f))",
+    errorBg: "var(--ant-color-error-bg, transparent)",
+    primary: "var(--ant-color-primary, #1677ff)",
+    primaryText: "var(--ant-color-white, #fff)",
+    shadow:
+      "var(--ant-box-shadow-secondary, 0 8px 24px rgba(0, 0, 0, 0.18))",
+  };
 
   // ── Tool Renderers ──────────────────────────────────────────────────
 
@@ -262,35 +295,43 @@ function buildPlugin() {
 
   function RemotePage() {
     const [profiles, setProfiles] = useState<any[]>([]);
+    const [jumpHosts, setJumpHosts] = useState<any[]>([]);
     const [activeProfileId, setActiveProfileId] = useState<string>("");
     const [loading, setLoading] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
+    const [jumpModalOpen, setJumpModalOpen] = useState(false);
     const [editingProfile, setEditingProfile] = useState<any | null>(null);
+    const [editingJumpHost, setEditingJumpHost] = useState<any | null>(null);
     const [saving, setSaving] = useState(false);
+    const [savingJumpHost, setSavingJumpHost] = useState(false);
     const [connectingId, setConnectingId] = useState<string | null>(null);
     const [form] = Form.useForm();
+    const [jumpForm] = Form.useForm();
 
-    const fetchProfiles = useCallback(async () => {
+    const fetchData = useCallback(async () => {
       setLoading(true);
       try {
         const sessionId = getSessionId() || "";
-        const data = await apiFetch(
-          `/remote/profiles?session_id=${encodeURIComponent(sessionId)}`,
-        );
-        setProfiles(data.profiles || []);
-        setActiveProfileId(data.active_profile_id || "");
+        const encodedSessionId = encodeURIComponent(sessionId);
+        const [profileData, jumpHostData] = await Promise.all([
+          apiFetch(`/remote/profiles?session_id=${encodedSessionId}`),
+          apiFetch("/remote/jump-hosts"),
+        ]);
+        setProfiles(profileData.profiles || []);
+        setActiveProfileId(profileData.active_profile_id || "");
+        setJumpHosts(jumpHostData.jump_hosts || []);
       } catch (e: any) {
-        console.error("[Remote] Failed to fetch profiles:", e);
+        console.error("[Remote] Failed to fetch data:", e);
       } finally {
         setLoading(false);
       }
     }, []);
 
     useEffect(() => {
-      fetchProfiles();
-      const interval = setInterval(fetchProfiles, 10000);
+      fetchData();
+      const interval = setInterval(fetchData, 10000);
       return () => clearInterval(interval);
-    }, [fetchProfiles]);
+    }, [fetchData]);
 
     const handleSave = async (values: any) => {
       setSaving(true);
@@ -312,7 +353,7 @@ function buildPlugin() {
         setModalOpen(false);
         setEditingProfile(null);
         form.resetFields();
-        fetchProfiles();
+        fetchData();
       } catch (e: any) {
         antdMessage.error(`Save failed: ${e.message}`);
       } finally {
@@ -336,8 +377,67 @@ function buildPlugin() {
         password: "",
         key_path: profile.key_path,
         passphrase: "",
+        jump_host_id: profile.jump_host_id || "",
       });
       setModalOpen(true);
+    };
+
+    const handleSaveJumpHost = async (values: any) => {
+      setSavingJumpHost(true);
+      try {
+        await apiFetch(
+          editingJumpHost
+            ? `/remote/jump-hosts/${editingJumpHost.id}`
+            : "/remote/jump-hosts",
+          {
+            method: editingJumpHost ? "PUT" : "POST",
+            body: JSON.stringify(values),
+          },
+        );
+        antdMessage.success(
+          editingJumpHost ? "Jump host updated" : "Jump host saved",
+        );
+        setJumpModalOpen(false);
+        setEditingJumpHost(null);
+        jumpForm.resetFields();
+        fetchData();
+      } catch (e: any) {
+        antdMessage.error(`Save jump host failed: ${e.message}`);
+      } finally {
+        setSavingJumpHost(false);
+      }
+    };
+
+    const openNewJumpHostModal = () => {
+      setEditingJumpHost(null);
+      jumpForm.resetFields();
+      setJumpModalOpen(true);
+    };
+
+    const openEditJumpHostModal = (jumpHost: any) => {
+      setEditingJumpHost(jumpHost);
+      jumpForm.setFieldsValue({
+        name: jumpHost.name,
+        host: jumpHost.host,
+        port: jumpHost.port,
+        username: jumpHost.username,
+        password: "",
+        key_path: jumpHost.key_path,
+        passphrase: "",
+      });
+      setJumpModalOpen(true);
+    };
+
+    const handleDeleteJumpHost = async (jumpHostId: string) => {
+      try {
+        await apiFetch(`/remote/jump-hosts/${jumpHostId}`, {
+          method: "DELETE",
+        });
+        antdMessage.success("Jump host deleted");
+        fetchData();
+      } catch (e: any) {
+        antdMessage.error(`Delete jump host failed: ${e.message}`);
+      }
     };
 
     const handleToggleConnect = async (profile: any) => {
@@ -356,7 +456,7 @@ function buildPlugin() {
             method: "DELETE",
           });
           antdMessage.success("Disconnected");
-          fetchProfiles();
+          fetchData();
         } catch (e: any) {
           antdMessage.error(`Disconnect failed: ${e.message}`);
         }
@@ -369,7 +469,7 @@ function buildPlugin() {
             body: JSON.stringify({ session_id: sessionId }),
           });
           antdMessage.success(`Connected to ${profile.name}`);
-          fetchProfiles();
+          fetchData();
         } catch (e: any) {
           antdMessage.error(`Connection failed: ${e.message}`);
         } finally {
@@ -384,7 +484,7 @@ function buildPlugin() {
           method: "DELETE",
         });
         antdMessage.success("Profile deleted");
-        fetchProfiles();
+        fetchData();
       } catch (e: any) {
         antdMessage.error(`Delete failed: ${e.message}`);
       }
@@ -415,8 +515,16 @@ function buildPlugin() {
           null,
           React.createElement(
             Button,
-            { icon: React.createElement(ReloadOutlined), onClick: fetchProfiles },
+            { icon: React.createElement(ReloadOutlined), onClick: fetchData },
             "Refresh",
+          ),
+          React.createElement(
+            Button,
+            {
+              icon: React.createElement(PlusOutlined),
+              onClick: openNewJumpHostModal,
+            },
+            "New Jump Host",
           ),
           React.createElement(
             Button,
@@ -439,6 +547,98 @@ function buildPlugin() {
           "Only one connection can be active at a time. " +
           "When connected, all shell commands in the current chat execute on the remote machine.",
       }),
+      React.createElement(
+        Card,
+        {
+          size: "small",
+          title: "Jump Hosts",
+          style: { marginBottom: 16 },
+        },
+        jumpHosts.length === 0
+          ? React.createElement(
+              Empty,
+              {
+                image: Empty.PRESENTED_IMAGE_SIMPLE,
+                description: "No saved jump hosts.",
+              },
+            )
+          : React.createElement(
+              List,
+              {
+                dataSource: jumpHosts,
+                renderItem: (jumpHost: any) =>
+                  React.createElement(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "8px 0",
+                        borderBottom: "1px solid #f0f0f0",
+                      },
+                    },
+                    React.createElement(
+                      "div",
+                      { style: { minWidth: 0 } },
+                      React.createElement(
+                        Text,
+                        { strong: true },
+                        jumpHost.name ||
+                          `${jumpHost.username}@${jumpHost.host}`,
+                      ),
+                      React.createElement(
+                        "div",
+                        { style: { marginTop: 4 } },
+                        React.createElement(
+                          Text,
+                          { type: "secondary", style: { fontSize: 12 } },
+                          `${jumpHost.username}@${jumpHost.host}:${jumpHost.port}`,
+                          jumpHost.key_path
+                            ? `  |  Key: ${jumpHost.key_path}`
+                            : "",
+                        ),
+                      ),
+                    ),
+                    React.createElement(
+                      Space,
+                      null,
+                      React.createElement(
+                        Tooltip,
+                        { title: "Edit this jump host" },
+                        React.createElement(Button, {
+                          type: "text",
+                          size: "small",
+                          icon: React.createElement(EditOutlined),
+                          onClick: () => openEditJumpHostModal(jumpHost),
+                        }),
+                      ),
+                      React.createElement(
+                        Popconfirm,
+                        {
+                          title: "Delete this jump host?",
+                          onConfirm: () => handleDeleteJumpHost(jumpHost.id),
+                          okText: "Delete",
+                          cancelText: "Cancel",
+                          okButtonProps: { danger: true },
+                        },
+                        React.createElement(Button, {
+                          type: "text",
+                          danger: true,
+                          size: "small",
+                          icon: React.createElement(DeleteOutlined),
+                        }),
+                      ),
+                    ),
+                  ),
+              },
+            ),
+      ),
+      React.createElement(
+        Title,
+        { level: 5, style: { marginTop: 0 } },
+        "Devices",
+      ),
       // Profile list
       loading
         ? React.createElement(Spin, {
@@ -515,6 +715,9 @@ function buildPlugin() {
                             `${profile.username}@${profile.host}:${profile.port}`,
                             profile.key_path
                               ? `  |  Key: ${profile.key_path}`
+                              : "",
+                            profile.jump_host_name
+                              ? `  |  via ${profile.jump_host_name}`
                               : "",
                           ),
                         ),
@@ -660,6 +863,20 @@ function buildPlugin() {
           ),
           React.createElement(
             Form.Item,
+            { name: "jump_host_id", label: "Jump Host" },
+            React.createElement(Select, {
+              allowClear: true,
+              placeholder: "Direct connection (no jump host)",
+              options: jumpHosts.map((jumpHost: any) => ({
+                label:
+                  jumpHost.name ||
+                  `${jumpHost.username}@${jumpHost.host}:${jumpHost.port}`,
+                value: jumpHost.id,
+              })),
+            }),
+          ),
+          React.createElement(
+            Form.Item,
             null,
             React.createElement(
               Button,
@@ -670,6 +887,104 @@ function buildPlugin() {
                 style: { width: "100%" },
               },
               editingProfile ? "Update Profile" : "Save Profile",
+            ),
+          ),
+        ),
+      ),
+      React.createElement(
+        Modal,
+        {
+          title: editingJumpHost ? "Edit Jump Host" : "New Jump Host",
+          open: jumpModalOpen,
+          onCancel: () => {
+            setJumpModalOpen(false);
+            setEditingJumpHost(null);
+            jumpForm.resetFields();
+          },
+          footer: null,
+        },
+        React.createElement(
+          Form,
+          { form: jumpForm, layout: "vertical", onFinish: handleSaveJumpHost },
+          React.createElement(
+            Form.Item,
+            { name: "name", label: "Display Name" },
+            React.createElement(Input, {
+              placeholder: "Bastion (optional, auto-generated if empty)",
+            }),
+          ),
+          React.createElement(
+            Form.Item,
+            {
+              name: "host",
+              label: "Host",
+              rules: [{ required: true, message: "Please enter the host" }],
+            },
+            React.createElement(Input, {
+              placeholder: "bastion.example.com or 192.168.1.10",
+            }),
+          ),
+          React.createElement(
+            Space,
+            { style: { width: "100%" } },
+            React.createElement(
+              Form.Item,
+              {
+                name: "port",
+                label: "Port",
+                initialValue: 22,
+                style: { width: 120 },
+              },
+              React.createElement(Input, { type: "number" }),
+            ),
+            React.createElement(
+              Form.Item,
+              {
+                name: "username",
+                label: "Username",
+                initialValue: "root",
+                style: { flex: 1 },
+              },
+              React.createElement(Input),
+            ),
+          ),
+          React.createElement(
+            Form.Item,
+            { name: "password", label: "Password" },
+            React.createElement(Input.Password, {
+              placeholder: editingJumpHost
+                ? "Leave empty to keep the saved password"
+                : "Leave empty if using key auth",
+            }),
+          ),
+          React.createElement(
+            Form.Item,
+            { name: "key_path", label: "SSH Key Path" },
+            React.createElement(Input, {
+              placeholder: "/home/user/.ssh/id_rsa (optional)",
+            }),
+          ),
+          React.createElement(
+            Form.Item,
+            { name: "passphrase", label: "Key Passphrase" },
+            React.createElement(Input.Password, {
+              placeholder: editingJumpHost
+                ? "Leave empty to keep the saved passphrase"
+                : "If key is encrypted",
+            }),
+          ),
+          React.createElement(
+            Form.Item,
+            null,
+            React.createElement(
+              Button,
+              {
+                type: "primary",
+                htmlType: "submit",
+                loading: savingJumpHost,
+                style: { width: "100%" },
+              },
+              editingJumpHost ? "Update Jump Host" : "Save Jump Host",
             ),
           ),
         ),
@@ -773,6 +1088,7 @@ function buildPlugin() {
     const trigger = React.createElement(
       "button",
       {
+        id: "remote-ssh-header-status-react",
         type: "button",
         style: {
           height: 38,
@@ -783,10 +1099,10 @@ function buildPlugin() {
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          border: `1px solid ${isConnected ? "#b7eb8f" : "#d9d9d9"}`,
+          border: `1px solid ${isConnected ? theme.successBorder : theme.border}`,
           borderRadius: 6,
-          background: isConnected ? "#f6ffed" : "#fff",
-          color: isConnected ? "#237804" : "#595959",
+          background: isConnected ? theme.successBg : theme.bgContainer,
+          color: isConnected ? theme.success : theme.text,
           font: "inherit",
           cursor: "pointer",
           whiteSpace: "nowrap",
@@ -853,7 +1169,7 @@ function buildPlugin() {
             ),
         React.createElement(
           "div",
-          { style: { borderTop: "1px solid #f0f0f0", paddingTop: 8 } },
+          { style: { borderTop: `1px solid ${theme.border}`, paddingTop: 8 } },
           React.createElement(Text, { strong: true }, "Saved Devices"),
         ),
         profiles.length === 0
@@ -880,25 +1196,60 @@ function buildPlugin() {
                   },
                   React.createElement(
                     "div",
-                    { style: { minWidth: 0 } },
+                    { style: { flex: 1, minWidth: 0, overflow: "hidden" } },
                     React.createElement(
-                      Text,
-                      { strong: active, ellipsis: true, style: { maxWidth: 190 } },
+                      "div",
+                      {
+                        title:
+                          profile.name ||
+                          `${profile.username}@${profile.host}`,
+                        style: {
+                          color: theme.text,
+                          fontSize: 14,
+                          fontWeight: active ? 600 : 500,
+                          lineHeight: "20px",
+                          maxWidth: 200,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        },
+                      },
                       profile.name || `${profile.username}@${profile.host}`,
                     ),
                     React.createElement(
                       "div",
-                      null,
-                      React.createElement(
-                        Text,
-                        {
-                          type: "secondary",
-                          ellipsis: true,
-                          style: { maxWidth: 190, fontSize: 12 },
+                      {
+                        title: `${profile.username}@${profile.host}:${profile.port}`,
+                        style: {
+                          color: theme.secondaryText,
+                          fontSize: 12,
+                          lineHeight: "18px",
+                          maxWidth: 200,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         },
-                        `${profile.username}@${profile.host}:${profile.port}`,
-                      ),
+                      },
+                      `${profile.username}@${profile.host}:${profile.port}`,
                     ),
+                    profile.jump_host_name
+                      ? React.createElement(
+                          "div",
+                          {
+                            title: `via ${profile.jump_host_name}`,
+                            style: {
+                              color: theme.secondaryText,
+                              fontSize: 12,
+                              lineHeight: "18px",
+                              maxWidth: 200,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            },
+                          },
+                          `via ${profile.jump_host_name}`,
+                        )
+                      : null,
                   ),
                   React.createElement(
                     Button,
@@ -972,10 +1323,93 @@ function buildPlugin() {
     return false;
   }
 
+  function findHeaderMountContainer(): HTMLElement | null {
+    const selectors = [
+      "[data-qwenpaw-header]",
+      "[data-app-header]",
+      ".qwenpaw-header",
+      ".app-header",
+      ".topbar",
+      ".top-bar",
+      ".navbar",
+      ".nav-bar",
+      ".ant-layout-header",
+      "header",
+      "nav",
+    ];
+
+    for (const selector of selectors) {
+      const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(selector),
+      );
+      for (const candidate of candidates) {
+        const rect = candidate.getBoundingClientRect();
+        if (
+          rect.top >= 0 &&
+          rect.top < 120 &&
+          rect.width >= 320 &&
+          rect.height >= 32 &&
+          rect.height <= 120
+        ) {
+          return candidate;
+        }
+      }
+    }
+
+    const topContainers = Array.from(
+      document.querySelectorAll<HTMLElement>("div,section"),
+    )
+      .filter((el) => {
+        const rect = el.getBoundingClientRect();
+        if (
+          rect.top < 0 ||
+          rect.top >= 96 ||
+          rect.width < 480 ||
+          rect.height < 40 ||
+          rect.height > 120
+        ) {
+          return false;
+        }
+        const style = window.getComputedStyle(el);
+        return (
+          style.display === "flex" ||
+          style.display === "grid" ||
+          style.alignItems === "center"
+        );
+      })
+      .sort((a, b) => {
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        return ar.top - br.top || ar.height - br.height;
+      });
+
+    return topContainers[0] || null;
+  }
+
   function mountHeaderStatusFallback() {
-    const existing = document.getElementById("remote-ssh-header-status");
+    const existingFallback = document.getElementById(
+      "remote-ssh-header-status",
+    );
+    if (
+      existingFallback &&
+      existingFallback.dataset.remoteBuild !== REMOTE_PLUGIN_BUILD_ID
+    ) {
+      existingFallback.remove();
+    }
+
+    const existing =
+      document.getElementById("remote-ssh-header-status") ||
+      document.getElementById("remote-ssh-header-status-react");
     if (existing) return true;
 
+    const headerLabels = [
+      "文档资料",
+      "Docs",
+      "Documentation",
+      "GitHub",
+      "代码",
+      "Code",
+    ];
     const matched = Array.from(
       document.querySelectorAll<HTMLElement>(
         "button,a,[role='button'],span,div",
@@ -989,9 +1423,7 @@ function buildPlugin() {
         rect.width > 0 &&
         rect.width < 320 &&
         rect.height > 0 &&
-        (text.includes("文档资料") ||
-          text.includes("GitHub") ||
-          text.includes("代码"))
+        headerLabels.some((label) => text.includes(label))
       );
     });
     const targets = Array.from(
@@ -1006,21 +1438,21 @@ function buildPlugin() {
       const score = (el: HTMLElement) => {
         const text = (el.textContent || "").trim();
         const rect = el.getBoundingClientRect();
-        const exact =
-          text === "文档资料" || text === "GitHub" || text === "代码";
+        const exact = headerLabels.includes(text);
         return (exact ? 0 : 10000) + rect.width * rect.height;
       };
       return score(a) - score(b);
     });
     const target = targets[0];
-    const parent = target?.parentElement;
-    if (!target || !parent) {
+    const parent = target?.parentElement || findHeaderMountContainer();
+    if (!parent) {
       console.warn("[Remote] Header DOM mount point not found.");
       return false;
     }
 
     const root = document.createElement("div");
     root.id = "remote-ssh-header-status";
+    root.dataset.remoteBuild = REMOTE_PLUGIN_BUILD_ID;
     root.style.display = "inline-flex";
     root.style.alignItems = "center";
     root.style.margin = "0 8px";
@@ -1035,10 +1467,10 @@ function buildPlugin() {
     button.style.alignItems = "center";
     button.style.justifyContent = "center";
     button.style.gap = "8px";
-    button.style.border = "1px solid #d9d9d9";
+    button.style.border = `1px solid ${theme.border}`;
     button.style.borderRadius = "6px";
-    button.style.background = "#fff";
-    button.style.color = "#595959";
+    button.style.background = theme.bgContainer;
+    button.style.color = theme.text;
     button.style.font = "inherit";
     button.style.cursor = "pointer";
     button.style.whiteSpace = "nowrap";
@@ -1047,7 +1479,7 @@ function buildPlugin() {
     dot.style.width = "8px";
     dot.style.height = "8px";
     dot.style.borderRadius = "50%";
-    dot.style.background = "#bfbfbf";
+    dot.style.background = theme.secondaryText;
     dot.style.flex = "0 0 auto";
 
     const label = document.createElement("span");
@@ -1063,10 +1495,11 @@ function buildPlugin() {
     panel.style.zIndex = "10000";
     panel.style.width = "320px";
     panel.style.padding = "12px";
-    panel.style.border = "1px solid #d9d9d9";
+    panel.style.border = `1px solid ${theme.border}`;
     panel.style.borderRadius = "8px";
-    panel.style.background = "#fff";
-    panel.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.12)";
+    panel.style.background = theme.bgElevated;
+    panel.style.color = theme.text;
+    panel.style.boxShadow = theme.shadow;
     panel.style.display = "none";
 
     const panelTitle = document.createElement("div");
@@ -1075,14 +1508,14 @@ function buildPlugin() {
 
     const panelBody = document.createElement("div");
     panelBody.style.fontSize = "12px";
-    panelBody.style.color = "#595959";
+    panelBody.style.color = theme.secondaryText;
     panelBody.style.wordBreak = "break-all";
 
     const profileTitle = document.createElement("div");
     profileTitle.textContent = "Saved Devices";
     profileTitle.style.marginTop = "10px";
     profileTitle.style.paddingTop = "10px";
-    profileTitle.style.borderTop = "1px solid #f0f0f0";
+    profileTitle.style.borderTop = `1px solid ${theme.border}`;
     profileTitle.style.fontWeight = "600";
 
     const profileList = document.createElement("div");
@@ -1097,17 +1530,21 @@ function buildPlugin() {
     disconnect.style.marginTop = "10px";
     disconnect.style.height = "28px";
     disconnect.style.padding = "0 10px";
-    disconnect.style.border = "1px solid #ffccc7";
+    disconnect.style.border = `1px solid ${theme.errorBorder}`;
     disconnect.style.borderRadius = "4px";
-    disconnect.style.background = "#fff";
-    disconnect.style.color = "#cf1322";
+    disconnect.style.background = theme.bgElevated;
+    disconnect.style.color = theme.error;
     disconnect.style.cursor = "pointer";
     disconnect.style.display = "none";
 
     panel.append(panelTitle, panelBody, disconnect, profileTitle, profileList);
     button.append(dot, label);
     root.append(button, panel);
-    parent.insertBefore(root, target);
+    if (target && target.parentElement === parent) {
+      parent.insertBefore(root, target);
+    } else {
+      parent.appendChild(root);
+    }
 
     let currentConnection: any = null;
 
@@ -1117,7 +1554,7 @@ function buildPlugin() {
       if (profiles.length === 0) {
         const empty = document.createElement("div");
         empty.textContent = "No saved devices. Add one from Remote SSH.";
-        empty.style.color = "#8c8c8c";
+        empty.style.color = theme.secondaryText;
         empty.style.fontSize = "12px";
         profileList.append(empty);
         return;
@@ -1132,23 +1569,47 @@ function buildPlugin() {
         row.style.gap = "8px";
 
         const info = document.createElement("div");
+        info.style.flex = "1";
         info.style.minWidth = "0";
+        info.style.overflow = "hidden";
 
         const name = document.createElement("div");
         name.textContent =
           profile.name || `${profile.username}@${profile.host}`;
-        name.style.fontWeight = active ? "600" : "400";
+        name.title = name.textContent;
+        name.style.color = theme.text;
+        name.style.fontSize = "14px";
+        name.style.fontWeight = active ? "600" : "500";
+        name.style.lineHeight = "20px";
+        name.style.maxWidth = "200px";
         name.style.overflow = "hidden";
         name.style.textOverflow = "ellipsis";
         name.style.whiteSpace = "nowrap";
 
         const endpoint = document.createElement("div");
         endpoint.textContent = `${profile.username}@${profile.host}:${profile.port}`;
-        endpoint.style.color = "#8c8c8c";
+        endpoint.title = endpoint.textContent;
+        endpoint.style.color = theme.secondaryText;
         endpoint.style.fontSize = "12px";
+        endpoint.style.lineHeight = "18px";
+        endpoint.style.maxWidth = "200px";
         endpoint.style.overflow = "hidden";
         endpoint.style.textOverflow = "ellipsis";
         endpoint.style.whiteSpace = "nowrap";
+
+        const via = document.createElement("div");
+        via.textContent = profile.jump_host_name
+          ? `via ${profile.jump_host_name}`
+          : "";
+        via.title = via.textContent;
+        via.style.color = theme.secondaryText;
+        via.style.fontSize = "12px";
+        via.style.lineHeight = "18px";
+        via.style.maxWidth = "200px";
+        via.style.overflow = "hidden";
+        via.style.textOverflow = "ellipsis";
+        via.style.whiteSpace = "nowrap";
+        via.style.display = profile.jump_host_name ? "" : "none";
 
         const action = document.createElement("button");
         action.type = "button";
@@ -1156,11 +1617,11 @@ function buildPlugin() {
         action.style.height = "28px";
         action.style.padding = "0 10px";
         action.style.border = active
-          ? "1px solid #ffccc7"
-          : "1px solid #1677ff";
+          ? `1px solid ${theme.errorBorder}`
+          : `1px solid ${theme.primary}`;
         action.style.borderRadius = "4px";
-        action.style.background = active ? "#fff" : "#1677ff";
-        action.style.color = active ? "#cf1322" : "#fff";
+        action.style.background = active ? theme.bgElevated : theme.primary;
+        action.style.color = active ? theme.error : theme.primaryText;
         action.style.cursor = "pointer";
         action.addEventListener("click", async () => {
           const sessionId = getSessionId();
@@ -1194,7 +1655,7 @@ function buildPlugin() {
           }
         });
 
-        info.append(name, endpoint);
+        info.append(name, endpoint, via);
         row.append(info, action);
         profileList.append(row);
       }
@@ -1209,10 +1670,10 @@ function buildPlugin() {
       currentConnection = connection;
       if (connection) {
         const host = `${connection.username}@${connection.host}:${connection.port}`;
-        button.style.borderColor = "#b7eb8f";
-        button.style.background = "#f6ffed";
-        button.style.color = "#237804";
-        dot.style.background = "#52c41a";
+        button.style.borderColor = theme.successBorder;
+        button.style.background = theme.successBg;
+        button.style.color = theme.success;
+        dot.style.background = theme.success;
         label.textContent = `${connection.username}@${connection.host}`;
         button.title = host;
         panelTitle.textContent = "SSH Connected";
@@ -1222,10 +1683,10 @@ function buildPlugin() {
         panelBody.style.whiteSpace = "pre-line";
         disconnect.style.display = "";
       } else {
-        button.style.borderColor = error ? "#ffccc7" : "#d9d9d9";
-        button.style.background = "#fff";
-        button.style.color = error ? "#cf1322" : "#595959";
-        dot.style.background = error ? "#ff4d4f" : "#bfbfbf";
+        button.style.borderColor = error ? theme.errorBorder : theme.border;
+        button.style.background = error ? theme.errorBg : theme.bgContainer;
+        button.style.color = error ? theme.error : theme.text;
+        dot.style.background = error ? theme.error : theme.secondaryText;
         label.textContent = error ? "SSH Error" : "SSH Offline";
         button.title = error || "No active SSH connection";
         panelTitle.textContent = error ? "SSH Status Error" : "SSH Offline";
@@ -1336,14 +1797,57 @@ function buildPlugin() {
     },
   ]);
 
-  if (!registerHeaderStatus()) {
+  const registeredHeaderStatus = registerHeaderStatus();
+  if (!registeredHeaderStatus) {
     mountHeaderStatusFallbackWhenReady();
+  } else {
+    window.setTimeout(mountHeaderStatusFallbackWhenReady, 750);
   }
 }
 
 // Auto-initialize when loaded
-if ((window as any).QwenPaw?.host) {
-  buildPlugin();
-} else {
-  console.warn("[Remote] QwenPaw.host not available, plugin not loaded");
+function isQwenPawHostReady() {
+  const host = (window as any).QwenPaw?.host;
+  return Boolean(
+    host?.React &&
+      host?.antd &&
+      host?.getApiUrl &&
+      host?.getApiToken &&
+      (window as any).QwenPaw?.registerRoutes,
+  );
 }
+
+function initializeWhenReady() {
+  if (isQwenPawHostReady()) {
+    buildPlugin();
+    return;
+  }
+
+  let attempts = 0;
+  const maxAttempts = 120;
+  let observer: MutationObserver | null = null;
+
+  const tryInitialize = () => {
+    attempts += 1;
+    if (isQwenPawHostReady()) {
+      observer?.disconnect();
+      window.clearInterval(timer);
+      buildPlugin();
+      return;
+    }
+
+    if (attempts >= maxAttempts) {
+      observer?.disconnect();
+      window.clearInterval(timer);
+      console.warn("[Remote] QwenPaw.host not available, plugin not loaded");
+    }
+  };
+
+  const timer = window.setInterval(tryInitialize, 250);
+  if (document.body) {
+    observer = new MutationObserver(tryInitialize);
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+}
+
+initializeWhenReady();

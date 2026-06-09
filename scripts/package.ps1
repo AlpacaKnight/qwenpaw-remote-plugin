@@ -26,7 +26,7 @@ Copy-Item -LiteralPath plugin.json, plugin.py, requirements.txt, context.py, ssh
 Copy-Item -LiteralPath routers, tools -Destination $staging -Recurse
 
 New-Item -ItemType Directory -Force -Path (Join-Path $staging "ui\dist") | Out-Null
-Copy-Item -LiteralPath "ui\dist\index.js" -Destination (Join-Path $staging "ui\dist\index.js")
+Copy-Item -Path "ui\dist\*" -Destination (Join-Path $staging "ui\dist")
 
 Get-ChildItem -Path $staging -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
 Get-ChildItem -Path $staging -Recurse -File -Include "*.pyc", "*.pyo" | Remove-Item -Force

@@ -53,6 +53,14 @@ async def remote_list() -> ToolResponse:
     else:
         uptime_str = f"{uptime / 3600:.1f}h"
 
+    via = ""
+    if info.get("via_jump_host"):
+        jump_label = info.get("jump_host_name") or (
+            f"{info.get('jump_username')}@"
+            f"{info.get('jump_host')}:{info.get('jump_port')}"
+        )
+        via = f"  Via jump host: {jump_label}\n"
+
     return ToolResponse(
         content=[
             TextBlock(
@@ -60,6 +68,7 @@ async def remote_list() -> ToolResponse:
                 text=(
                     f"Active SSH connection:\n"
                     f"  Host: {info['username']}@{info['host']}:{info['port']}\n"
+                    f"{via}"
                     f"  Connected at: {info['connected_at']}\n"
                     f"  Uptime: {uptime_str}\n"
                     f"  Remote working directory: {info['default_cwd']}"

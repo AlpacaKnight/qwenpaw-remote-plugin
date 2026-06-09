@@ -69,6 +69,10 @@ class RemoteCommandHandler(BaseControlCommandHandler):
             port = int(parsed.get("port", "22"))
         except ValueError:
             return "Invalid port. Example: `/remote connect host=192.168.0.10 username=root port=22`"
+        try:
+            jump_port = int(parsed.get("jump_port", "22"))
+        except ValueError:
+            return "Invalid jump_port. Example: `/remote connect root@10.0.0.5 jump_host=1.2.3.4 jump_username=jump jump_port=22`"
 
         if not host or not username:
             return (
@@ -87,13 +91,29 @@ class RemoteCommandHandler(BaseControlCommandHandler):
                 password=parsed.get("password", ""),
                 key_path=parsed.get("key_path", ""),
                 passphrase=parsed.get("passphrase", ""),
+                jump_host_id=parsed.get("jump_id", ""),
+                jump_name=parsed.get("jump_name", ""),
+                jump_host=parsed.get("jump_host", ""),
+                jump_port=jump_port,
+                jump_username=parsed.get("jump_username", ""),
+                jump_password=parsed.get("jump_password", ""),
+                jump_key_path=parsed.get("jump_key_path", ""),
+                jump_passphrase=parsed.get("jump_passphrase", ""),
             )
         except (ConnectionError, ValueError) as exc:
             return f"Remote connection failed: {exc}"
 
+        via = ""
+        if info.get("via_jump_host"):
+            jump_label = info.get("jump_host_name") or (
+                f"{info.get('jump_username')}@"
+                f"{info.get('jump_host')}:{info.get('jump_port')}"
+            )
+            via = f"\nVia jump host: {jump_label}."
+
         return (
-            f"Connected to {info['username']}@{info['host']}:{info['port']}.\n"
-            "Use `/remote <command>` to run commands on the remote machine, "
+            f"Connected to {info['username']}@{info['host']}:{info['port']}."
+            f"{via}\nUse `/remote <command>` to run commands on the remote machine, "
             "or `/remote disconnect` to close the connection."
         )
 
@@ -147,9 +167,17 @@ class RemoteCommandHandler(BaseControlCommandHandler):
             )
 
         info = conn.to_dict()
+        via = ""
+        if info.get("via_jump_host"):
+            jump_label = info.get("jump_host_name") or (
+                f"{info.get('jump_username')}@"
+                f"{info.get('jump_host')}:{info.get('jump_port')}"
+            )
+            via = f"- Via jump host: {jump_label}\n"
         return (
             "Active SSH connection:\n"
             f"- Host: {info['username']}@{info['host']}:{info['port']}\n"
+            f"{via}"
             f"- Connected at: {info['connected_at']}\n"
             f"- Remote working directory: {info['default_cwd']}"
         )
@@ -188,10 +216,13 @@ class RemoteCommandHandler(BaseControlCommandHandler):
             "`/remote` - Show current connection status\n"
             "`/remote connect host=<host> username=<user> password=<password>` - Connect with password\n"
             "`/remote connect <user>@<host> key_path=<path>` - Connect with SSH key\n"
+            "`/remote connect <user>@<host> jump_name=<name>` - Connect through a saved jump host\n"
+            "`/remote connect <user>@<host> jump_host=<host> jump_username=<user>` - Connect through an inline jump host\n"
             "`/remote disconnect` - Disconnect current session\n"
             "`/remote <command>` - Run a command on the remote machine\n\n"
             "Examples:\n"
             "`/remote connect root@192.168.0.106 password=secret`\n"
+            "`/remote connect root@10.0.0.5 password=secret jump_name=bastion`\n"
             "`/remote pwd`\n"
             "`/remote 执行pwd`"
         )
