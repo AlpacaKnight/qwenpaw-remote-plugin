@@ -7,7 +7,7 @@ cd "$REPO_ROOT"
 
 VERSION=$(node -p "require('./plugin.json').version")
 FRONTEND_ENTRY=$(node -p "require('./plugin.json').entry.frontend")
-EXPECTED_FRONTEND_ENTRY="ui/dist/index.js?v=$VERSION"
+EXPECTED_FRONTEND_ENTRY="ui/dist/index.js"
 
 if [ "$FRONTEND_ENTRY" != "$EXPECTED_FRONTEND_ENTRY" ]; then
   echo "plugin.json entry.frontend must be $EXPECTED_FRONTEND_ENTRY, got $FRONTEND_ENTRY" >&2

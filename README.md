@@ -115,18 +115,20 @@ chmod +x scripts/package.sh
 
 脚本会自动读取 `plugin.json` 中的版本号，生成安装包 `dist\qwenpaw-remote-plugin-<version>.zip`。ZIP 根目录必须直接包含 `plugin.json`，不要多包一层仓库目录。打包脚本会使用跨平台的 ZIP 内部路径格式，避免在不同系统安装时找不到 `tools/`、`routers/` 等模块目录。
 
-QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。为了避免浏览器继续使用旧的 `ui/dist/index.js`，`entry.frontend` 必须带版本 query，并与 `version` 保持一致：
+QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`entry.frontend` 应设置为 `ui/dist/index.js`：
 
 ```json
 {
 	"version": "0.1.2",
 	"entry": {
-		"frontend": "ui/dist/index.js?v=0.1.2"
+		"frontend": "ui/dist/index.js"
 	}
 }
 ```
 
-打包脚本会校验这个一致性；如果只改了 `version` 但忘记同步 `entry.frontend`，打包会失败。
+打包脚本会校验这个一致性；如果 `entry.frontend` 被改成其他路径，打包会失败。
+
+如果需要避免浏览器缓存旧的前端 bundle，应由 QwenPaw Web 宿主在加载插件前端时根据插件版本自动追加 cache-busting 参数，例如把 `ui/dist/index.js` 加载为 `ui/dist/index.js?v=0.1.2`。插件包内的 `plugin.json` 仍应保持裸路径，避免把版本号写死到入口路径里。
 
 如果本机已经安装过前端依赖，可以跳过 `npm ci`：
 
@@ -170,4 +172,4 @@ docker exec copaw sh -lc '/app/venv/bin/qwenpaw plugin install /tmp/qwenpaw-remo
 curl -sS http://127.0.0.1:8088/api/frontend_plugin
 ```
 
-返回内容中应包含当前版本号，以及带版本 query 的 `frontend_entry`。如果浏览器页面仍显示旧 UI，先完整刷新页面；确认 `frontend_entry` 已变化后，Web 端会重新请求新的前端 bundle。
+返回内容中应包含当前版本号。`plugin.json` 中的入口应为 `ui/dist/index.js`；如果 QwenPaw Web 宿主已支持自动 cache busting，接口返回或页面实际加载的前端 URL 可以是 `ui/dist/index.js?v=<version>`。如果浏览器页面仍显示旧 UI，先完整刷新页面；必要时重启 QwenPaw Web 服务或清理浏览器缓存，确保 Web 端重新请求新的前端 bundle。

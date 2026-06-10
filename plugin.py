@@ -17,8 +17,13 @@ logger = logging.getLogger(__name__)
 class RemotePlugin:
     """Remote SSH plugin entry point."""
 
+    def __init__(self):
+        self._api = None
+
     def register(self, api):
         """Register tools, startup hook, and shutdown hook."""
+        self._api = api
+
         # Register tools via api.register_tool (deferred to startup hook)
         from .tools.remote_connect import remote_connect
         from .tools.remote_disconnect import remote_disconnect
@@ -82,13 +87,18 @@ class RemotePlugin:
         """Initialize Remote plugin on application startup."""
         logger.info("[Remote] Plugin starting up...")
 
-        # 1. Patch QwenPawAgent._create_toolkit to inject SSH middleware
+        # 1. Add a version query to the in-memory frontend entry so the
+        #    installed plugin keeps a clean manifest but the web loader
+        #    fetches a cache-busted bundle.
+        _patch_frontend_entry_cache_buster(self._api)
+
+        # 2. Patch QwenPawAgent._create_toolkit to inject SSH middleware
         _patch_create_toolkit()
 
-        # 2. Patch QwenPawAgent.reply to set ContextVar
+        # 3. Patch QwenPawAgent.reply to set ContextVar
         _patch_reply()
 
-        # 3. Mount HTTP router
+        # 4. Mount HTTP router
         _mount_router()
 
         logger.info("[Remote] Plugin startup complete")
@@ -103,6 +113,38 @@ class RemotePlugin:
             logger.info("[Remote] All SSH connections closed")
         except Exception as e:
             logger.warning("[Remote] Failed to close SSH connections: %s", e)
+
+
+def _patch_frontend_entry_cache_buster(api):
+    """Expose a versioned frontend URL without changing plugin.json."""
+    try:
+        registry = getattr(api, "_registry", None)
+        app = getattr(registry, "_plugin_http_app", None)
+        loader = getattr(getattr(app, "state", None), "plugin_loader", None)
+        if loader is None:
+            logger.warning("[Remote] Plugin loader unavailable for frontend cache busting")
+            return
+
+        record = loader.get_all_loaded_plugins().get("remote")
+        if record is None:
+            logger.warning("[Remote] Plugin record unavailable for frontend cache busting")
+            return
+
+        manifest = record.manifest
+        frontend = manifest.entry.frontend
+        if not frontend:
+            return
+
+        version = manifest.version
+        expected = "ui/dist/index.js"
+        if frontend == expected:
+            manifest.entry.frontend = f"{expected}?v={version}"
+            logger.info(
+                "[Remote] Frontend entry exposed as %s",
+                manifest.entry.frontend,
+            )
+    except Exception as e:
+        logger.warning("[Remote] Failed to add frontend cache buster: %s", e)
 
 
 def _patch_create_toolkit():

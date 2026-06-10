@@ -9,7 +9,7 @@ $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 Set-Location $repoRoot
 
 $plugin = Get-Content -Raw -Encoding UTF8 "plugin.json" | ConvertFrom-Json
-$expectedFrontendEntry = "ui/dist/index.js?v=$($plugin.version)"
+$expectedFrontendEntry = "ui/dist/index.js"
 if ($plugin.entry.frontend -ne $expectedFrontendEntry) {
     throw "plugin.json entry.frontend must be $expectedFrontendEntry, got $($plugin.entry.frontend)"
 }

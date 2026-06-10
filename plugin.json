@@ -1,12 +1,12 @@
 {
   "id": "remote",
   "name": "Remote SSH",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "general",
   "description": "SSH into remote devices and execute shell commands transparently on remote machines.",
   "author": "QwenPaw Team",
   "entry": {
-    "frontend": "ui/dist/index.js?v=0.1.2",
+    "frontend": "ui/dist/index.js",
     "backend": "plugin.py"
   },
   "dependencies": ["paramiko>=3.0.0"],
