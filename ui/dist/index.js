@@ -1,4 +1,4 @@
-const se = "0.1.2-qwenpaw-sdk-cache-bust";
+const se = "0.1.2";
 function Te() {
   var Re, Pe;
   const C = window;
@@ -239,14 +239,14 @@ function Te() {
     );
   }
   function le() {
-    const [t, s] = R([]), [o, u] = R([]), [a, g] = R(""), [N, p] = R(!1), [i, w] = R(""), [T, h] = R(!1), [L, D] = R(!1), [f, $] = R(null), [y, U] = R(null), [q, c] = R(!1), [P, J] = R(!1), [Q, l] = R(null), [b] = x.useForm(), [d] = x.useForm(), m = fe(async () => {
+    const [t, s] = R([]), [o, u] = R([]), [a, g] = R(""), [N, p] = R(!1), [i, w] = R(""), [T, h] = R(!1), [L, D] = R(!1), [f, $] = R(null), [y, U] = R(null), [X, c] = R(!1), [P, J] = R(!1), [Q, l] = R(null), [b] = x.useForm(), [d] = x.useForm(), m = fe(async () => {
       p(!0), w("");
       try {
-        const n = G() || "", Z = `/remote/profiles?session_id=${encodeURIComponent(n)}`, X = "/remote/jump-hosts";
-        console.log("[Remote] Fetching data from:", Z, X);
+        const n = G() || "", q = `/remote/profiles?session_id=${encodeURIComponent(n)}`, Y = "/remote/jump-hosts";
+        console.log("[Remote] Fetching data from:", q, Y);
         const [ce, ke] = await Promise.all([
-          k(Z),
-          k(X)
+          k(q),
+          k(Y)
         ]);
         console.log("[Remote] Profiles data:", ce), console.log("[Remote] Jump hosts data:", ke), s(ce.profiles || []), g(ce.active_profile_id || ""), u(ke.jump_hosts || []);
       } catch (n) {
@@ -320,7 +320,7 @@ function Te() {
         key_path: n.key_path,
         passphrase: ""
       }), D(!0);
-    }, Y = async (n) => {
+    }, Z = async (n) => {
       try {
         await k(`/remote/jump-hosts/${n}`, {
           method: "DELETE"
@@ -339,8 +339,8 @@ function Te() {
           await k(`/remote/connections/${S}`, {
             method: "DELETE"
           }), E.success("Disconnected"), m();
-        } catch (X) {
-          E.error(`Disconnect failed: ${X.message}`);
+        } catch (Y) {
+          E.error(`Disconnect failed: ${Y.message}`);
         }
       else {
         l(n.id);
@@ -349,13 +349,13 @@ function Te() {
             method: "POST",
             body: JSON.stringify({ session_id: S })
           }), E.success(`Connected to ${n.name}`), m();
-        } catch (X) {
-          E.error(`Connection failed: ${X.message}`);
+        } catch (Y) {
+          E.error(`Connection failed: ${Y.message}`);
         } finally {
           l(null);
         }
       }
-    }, Ze = async (n) => {
+    }, qe = async (n) => {
       try {
         await k(`/remote/profiles/${n}`, {
           method: "DELETE"
@@ -487,7 +487,7 @@ function Te() {
                   ye,
                   {
                     title: "Delete this jump host?",
-                    onConfirm: () => Y(n.id),
+                    onConfirm: () => Z(n.id),
                     okText: "Delete",
                     cancelText: "Cancel",
                     okButtonProps: { danger: !0 }
@@ -530,7 +530,7 @@ function Te() {
         {
           dataSource: t,
           renderItem: (n) => {
-            const S = et(n.id), Z = Q === n.id;
+            const S = et(n.id), q = Q === n.id;
             return e.createElement(
               K,
               {
@@ -583,7 +583,7 @@ function Te() {
                 e.createElement(
                   v,
                   null,
-                  Z ? e.createElement(Me, {
+                  q ? e.createElement(Me, {
                     style: { fontSize: 18 }
                   }) : e.createElement(
                     ne,
@@ -611,7 +611,7 @@ function Te() {
                     ye,
                     {
                       title: "Delete this connection profile?",
-                      onConfirm: () => Ze(n.id),
+                      onConfirm: () => qe(n.id),
                       okText: "Delete",
                       cancelText: "Cancel",
                       okButtonProps: { danger: !0 }
@@ -726,7 +726,7 @@ function Te() {
               {
                 type: "primary",
                 htmlType: "submit",
-                loading: q,
+                loading: X,
                 style: { width: "100%" }
               },
               f ? "Update Profile" : "Save Profile"
@@ -915,7 +915,7 @@ function Te() {
         },
         f ? `${t.username}@${t.host}` : i ? "SSH Checking" : "SSH Offline"
       )
-    ), q = e.createElement(
+    ), X = e.createElement(
       "div",
       { style: { width: 320 } },
       e.createElement(
@@ -1043,7 +1043,7 @@ function Te() {
     return e.createElement(
       Ne,
       {
-        content: q,
+        content: X,
         trigger: "click",
         placement: "bottom"
       },
@@ -1052,7 +1052,7 @@ function Te() {
       }, U)
     );
   }
-  function qe() {
+  function Xe() {
     const t = window.QwenPaw, s = t == null ? void 0 : t.slot;
     if (typeof (s == null ? void 0 : s.fill) == "function")
       try {
@@ -1098,7 +1098,7 @@ function Te() {
       "[Remote] No QwenPaw header extension API found; will use DOM fallback."
     ), !1;
   }
-  function Xe() {
+  function Ye() {
     const t = [
       "[data-qwenpaw-header]",
       "[data-qwenpaw-topbar]",
@@ -1168,7 +1168,7 @@ function Te() {
         return (o.includes(_) ? 0 : 1e4) + j.width * j.height;
       };
       return d(l) - d(b);
-    })[0], N = (g == null ? void 0 : g.parentElement) || Xe();
+    })[0], N = (g == null ? void 0 : g.parentElement) || Ye();
     if (!N)
       return console.warn("[Remote] Header DOM mount point not found."), !1;
     const p = document.createElement("div");
@@ -1196,7 +1196,7 @@ function Te() {
       l.width >= 120 && b.width >= 120 || (document.body.appendChild(p), p.style.position = "fixed", p.style.top = "12px", p.style.right = "156px", p.style.zIndex = "10000", p.style.margin = "0", p.style.minWidth = "156px", console.debug("[Remote] Header status moved to fixed fallback mount."));
     };
     window.setTimeout(U, 50), window.setTimeout(U, 1e3);
-    let q = null;
+    let X = null;
     const c = (l, b) => {
       if ($.replaceChildren(), l.length === 0) {
         const d = document.createElement("div");
@@ -1216,18 +1216,18 @@ function Te() {
         W.textContent = d.jump_host_name ? `via ${d.jump_host_name}` : "", W.title = W.textContent, W.style.color = r.secondaryText, W.style.fontSize = "12px", W.style.lineHeight = "18px", W.style.maxWidth = "200px", W.style.overflow = "hidden", W.style.textOverflow = "ellipsis", W.style.whiteSpace = "nowrap", W.style.display = d.jump_host_name ? "" : "none";
         const H = document.createElement("button");
         H.type = "button", H.textContent = m ? "Disconnect" : "Connect", H.style.height = "28px", H.style.padding = "0 10px", H.style.border = m ? `1px solid ${r.errorBorder}` : `1px solid ${r.primary}`, H.style.borderRadius = "4px", H.style.background = m ? r.bgElevated : r.primary, H.style.color = m ? r.error : r.primaryText, H.style.cursor = "pointer", H.addEventListener("click", async () => {
-          const Y = G();
-          if (!Y) {
+          const Z = G();
+          if (!Z) {
             E.error("No active session. Open a chat first.");
             return;
           }
           H.disabled = !0, H.textContent = m ? "Disconnecting" : "Connecting";
           try {
-            m ? (await k(`/remote/connections/${Y}`, {
+            m ? (await k(`/remote/connections/${Z}`, {
               method: "DELETE"
             }), E.success("Disconnected")) : (await k(`/remote/profiles/${d.id}/connect`, {
               method: "POST",
-              body: JSON.stringify({ session_id: Y })
+              body: JSON.stringify({ session_id: Z })
             }), E.success(`Connected to ${d.name}`)), await J();
           } catch (ie) {
             E.error(
@@ -1239,7 +1239,7 @@ function Te() {
         }), j.append(O, F, W), _.append(j, H), $.append(_);
       }
     }, P = (l, b = [], d = "", m = "") => {
-      if (q = l, l) {
+      if (X = l, l) {
         const _ = `${l.username}@${l.host}:${l.port}`;
         i.style.borderColor = r.successBorder, i.style.background = r.successBg, i.style.color = r.success, w.style.background = r.success, T.textContent = `${l.username}@${l.host}`, i.title = _, L.textContent = "SSH Connected", D.textContent = `${_}
 Uptime: ${Math.round(
@@ -1276,7 +1276,7 @@ Work Dir: ${l.default_cwd || "/"}`, D.style.whiteSpace = "pre-line", y.style.dis
       p.contains(l.target) || (h.style.display = "none");
     }), y.addEventListener("click", async () => {
       const l = G();
-      if (!(!l || !q))
+      if (!(!l || !X))
         try {
           await k(`/remote/connections/${l}`, {
             method: "DELETE"
@@ -1325,7 +1325,7 @@ Work Dir: ${l.default_cwd || "/"}`, D.style.whiteSpace = "pre-line", y.style.dis
     icon: "🔗",
     priority: 20
   };
-  function Ye() {
+  function Ze() {
     var g, N, p, i;
     const t = window.QwenPaw, s = "legacy:remote:remote", o = "remote.main";
     let u = !1;
@@ -1381,7 +1381,7 @@ Work Dir: ${l.default_cwd || "/"}`, D.style.whiteSpace = "pre-line", y.style.dis
     }
     return console.warn("[Remote] No QwenPaw page registration API found."), !1;
   }
-  Ye(), window.setTimeout(Ie, 1e3), window.setTimeout(Ie, 3e3), qe() ? window.setTimeout(() => {
+  Ze(), window.setTimeout(Ie, 1e3), window.setTimeout(Ie, 3e3), Xe() ? window.setTimeout(() => {
     document.getElementById("remote-ssh-header-status-react") || $e();
   }, 1e3) : $e();
 }

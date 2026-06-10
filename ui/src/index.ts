@@ -8,7 +8,9 @@
  * Uses window.QwenPaw plugin API
  */
 
-const REMOTE_PLUGIN_BUILD_ID = "0.1.2-qwenpaw-sdk-cache-bust";
+declare const __REMOTE_PLUGIN_VERSION__: string;
+
+const REMOTE_PLUGIN_BUILD_ID = __REMOTE_PLUGIN_VERSION__;
 
 function buildPlugin() {
   const runtime = window as any;
