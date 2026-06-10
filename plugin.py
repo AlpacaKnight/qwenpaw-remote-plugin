@@ -178,9 +178,9 @@ def _mount_router():
             router=router,
             prefix="/remote",
         )
-        logger.info("[Remote] HTTP router mounted at /api/remote")
+        logger.info("[Remote] HTTP router mounted at /remote (API: /remote/*)")
     except Exception as e:
-        logger.warning("[Remote] Failed to mount HTTP router: %s", e)
+        logger.error("[Remote] Failed to mount HTTP router: %s", e)
 
 
 plugin = RemotePlugin()

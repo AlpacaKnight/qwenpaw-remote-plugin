@@ -8,7 +8,7 @@
  * Uses window.QwenPaw plugin API
  */
 
-const REMOTE_PLUGIN_BUILD_ID = "0.1.2-jump-host-status-theme";
+const REMOTE_PLUGIN_BUILD_ID = "0.1.2-qwenpaw-sdk-cache-bust";
 
 function buildPlugin() {
   const runtime = window as any;
@@ -57,6 +57,11 @@ function buildPlugin() {
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
+  function renderIcon(icon: any, fallback: string = "•") {
+    if (icon) return React.createElement(icon);
+    return React.createElement("span", null, fallback);
+  }
+
   function parseToolArgs(data: any): Record<string, any> {
     const firstData = data?.content?.[0]?.data;
     const rawArgs = firstData?.arguments;
@@ -79,8 +84,16 @@ function buildPlugin() {
       .join("\n");
   }
 
-  function getSessionId(): string | null {
-    return (window as any).currentSessionId ?? null;
+  function getSessionId(): string {
+    try {
+      const sid = (window as any).currentSessionId ||
+                  (window as any).sessionId ||
+                  localStorage?.getItem?.("sessionId");
+      if (sid) return sid;
+    } catch (e) {
+      console.debug("[Remote] Error getting sessionId:", e);
+    }
+    return "default-session";
   }
 
   async function apiFetch(path: string, options: RequestInit = {}) {
@@ -294,34 +307,45 @@ function buildPlugin() {
   // ── Remote Management Page ──────────────────────────────────────────
 
   function RemotePage() {
-    const [profiles, setProfiles] = useState<any[]>([]);
-    const [jumpHosts, setJumpHosts] = useState<any[]>([]);
-    const [activeProfileId, setActiveProfileId] = useState<string>("");
+    const [profiles, setProfiles] = useState([] as any[]);
+    const [jumpHosts, setJumpHosts] = useState([] as any[]);
+    const [activeProfileId, setActiveProfileId] = useState("");
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
     const [modalOpen, setModalOpen] = useState(false);
     const [jumpModalOpen, setJumpModalOpen] = useState(false);
-    const [editingProfile, setEditingProfile] = useState<any | null>(null);
-    const [editingJumpHost, setEditingJumpHost] = useState<any | null>(null);
+    const [editingProfile, setEditingProfile] = useState(null as any | null);
+    const [editingJumpHost, setEditingJumpHost] = useState(null as any | null);
     const [saving, setSaving] = useState(false);
     const [savingJumpHost, setSavingJumpHost] = useState(false);
-    const [connectingId, setConnectingId] = useState<string | null>(null);
+    const [connectingId, setConnectingId] = useState(null as string | null);
     const [form] = Form.useForm();
     const [jumpForm] = Form.useForm();
 
     const fetchData = useCallback(async () => {
       setLoading(true);
+      setError("");
       try {
         const sessionId = getSessionId() || "";
         const encodedSessionId = encodeURIComponent(sessionId);
+        const profileUrl = `/remote/profiles?session_id=${encodedSessionId}`;
+        const jumpUrl = `/remote/jump-hosts`;
+
+        console.log("[Remote] Fetching data from:", profileUrl, jumpUrl);
         const [profileData, jumpHostData] = await Promise.all([
-          apiFetch(`/remote/profiles?session_id=${encodedSessionId}`),
-          apiFetch("/remote/jump-hosts"),
+          apiFetch(profileUrl),
+          apiFetch(jumpUrl),
         ]);
+        console.log("[Remote] Profiles data:", profileData);
+        console.log("[Remote] Jump hosts data:", jumpHostData);
         setProfiles(profileData.profiles || []);
         setActiveProfileId(profileData.active_profile_id || "");
         setJumpHosts(jumpHostData.jump_hosts || []);
       } catch (e: any) {
+        const errMsg = e.message || String(e);
         console.error("[Remote] Failed to fetch data:", e);
+        setError(errMsg);
+        antdMessage.error(`Failed to load profiles: ${errMsg}`);
       } finally {
         setLoading(false);
       }
@@ -515,13 +539,13 @@ function buildPlugin() {
           null,
           React.createElement(
             Button,
-            { icon: React.createElement(ReloadOutlined), onClick: fetchData },
+            { icon: renderIcon(ReloadOutlined), onClick: fetchData },
             "Refresh",
           ),
           React.createElement(
             Button,
             {
-              icon: React.createElement(PlusOutlined),
+              icon: renderIcon(PlusOutlined),
               onClick: openNewJumpHostModal,
             },
             "New Jump Host",
@@ -530,14 +554,14 @@ function buildPlugin() {
             Button,
             {
               type: "primary",
-              icon: React.createElement(PlusOutlined),
+              icon: renderIcon(PlusOutlined),
               onClick: openNewProfileModal,
             },
             "New Connection",
           ),
         ),
       ),
-      // Info alert
+      // Info alert + error alert if any
       React.createElement(Alert, {
         type: "info",
         showIcon: true,
@@ -547,6 +571,15 @@ function buildPlugin() {
           "Only one connection can be active at a time. " +
           "When connected, all shell commands in the current chat execute on the remote machine.",
       }),
+      error
+        ? React.createElement(Alert, {
+            type: "error",
+            showIcon: true,
+            style: { marginBottom: 16 },
+            message: "Error loading data",
+            description: error,
+          })
+        : null,
       React.createElement(
         Card,
         {
@@ -609,7 +642,7 @@ function buildPlugin() {
                         React.createElement(Button, {
                           type: "text",
                           size: "small",
-                          icon: React.createElement(EditOutlined),
+                          icon: renderIcon(EditOutlined),
                           onClick: () => openEditJumpHostModal(jumpHost),
                         }),
                       ),
@@ -626,7 +659,7 @@ function buildPlugin() {
                           type: "text",
                           danger: true,
                           size: "small",
-                          icon: React.createElement(DeleteOutlined),
+                          icon: renderIcon(DeleteOutlined),
                         }),
                       ),
                     ),
@@ -750,7 +783,7 @@ function buildPlugin() {
                           React.createElement(Button, {
                             type: "text",
                             size: "small",
-                            icon: React.createElement(EditOutlined),
+                            icon: renderIcon(EditOutlined),
                             onClick: () => openEditProfileModal(profile),
                           }),
                         ),
@@ -767,7 +800,7 @@ function buildPlugin() {
                             type: "text",
                             danger: true,
                             size: "small",
-                            icon: React.createElement(DeleteOutlined),
+                            icon: renderIcon(DeleteOutlined),
                           }),
                         ),
                       ),
@@ -995,12 +1028,12 @@ function buildPlugin() {
   // ── Header SSH Status Indicator ──────────────────────────────────────
 
   function RemoteStatusIndicator() {
-    const [connection, setConnection] = useState<any>(null);
-    const [profiles, setProfiles] = useState<any[]>([]);
-    const [activeProfileId, setActiveProfileId] = useState<string>("");
-    const [connectingId, setConnectingId] = useState<string | null>(null);
+    const [connection, setConnection] = useState(null as any);
+    const [profiles, setProfiles] = useState([] as any[]);
+    const [activeProfileId, setActiveProfileId] = useState("");
+    const [connectingId, setConnectingId] = useState(null as string | null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string>("");
+    const [error, setError] = useState("");
 
     const fetchStatus = useCallback(async () => {
       try {
@@ -1017,7 +1050,9 @@ function buildPlugin() {
         setProfiles(profileData.profiles || []);
         setActiveProfileId(profileData.active_profile_id || "");
       } catch (e: any) {
-        setError(e.message);
+        const errorMsg = e.message || String(e);
+        console.error("[Remote] Failed to fetch status:", e);
+        setError(errorMsg);
         setConnection(null);
       } finally {
         setLoading(false);
@@ -1285,6 +1320,22 @@ function buildPlugin() {
 
   function registerHeaderStatus() {
     const qwenpaw = (window as any).QwenPaw;
+    const slot = qwenpaw?.slot;
+    if (typeof slot?.fill === "function") {
+      try {
+        slot.fill(
+          "remote",
+          "header.left",
+          () => React.createElement(RemoteStatusIndicator),
+          { id: "remote-ssh-status", order: 15 },
+        );
+        console.log("[Remote] Registered header status via QwenPaw.slot.fill");
+        return true;
+      } catch (e) {
+        console.debug("[Remote] QwenPaw.slot.fill failed:", e);
+      }
+    }
+
     const item = {
       id: "remote-ssh-status",
       key: "remote-ssh-status",
@@ -1304,6 +1355,8 @@ function buildPlugin() {
       ["registerStatusWidget", [item]],
       ["registerSlot", ["header:left", item]],
       ["registerSlot", ["topbar:left", item]],
+      ["registerSlot", ["toolbar:left", item]],
+      ["registerSlot", ["navbar:left", item]],
     ];
 
     for (const [name, args] of candidates) {
@@ -1311,14 +1364,15 @@ function buildPlugin() {
       if (typeof register !== "function") continue;
       try {
         register.apply(qwenpaw, args);
+        console.log(`[Remote] Registered header widget via ${name}`);
         return true;
       } catch (e) {
-        console.warn(`[Remote] ${name} failed:`, e);
+        console.debug(`[Remote] ${name} failed:`, e);
       }
     }
 
-    console.warn(
-      "[Remote] No QwenPaw header extension API found; SSH status indicator was not registered.",
+    console.debug(
+      "[Remote] No QwenPaw header extension API found; will use DOM fallback.",
     );
     return false;
   }
@@ -1326,8 +1380,10 @@ function buildPlugin() {
   function findHeaderMountContainer(): HTMLElement | null {
     const selectors = [
       "[data-qwenpaw-header]",
+      "[data-qwenpaw-topbar]",
       "[data-app-header]",
       ".qwenpaw-header",
+      ".qwenpaw-topbar",
       ".app-header",
       ".topbar",
       ".top-bar",
@@ -1356,14 +1412,15 @@ function buildPlugin() {
       }
     }
 
+    // Web 端备选策略：查找最顶部的 flex 容器
     const topContainers = Array.from(
-      document.querySelectorAll<HTMLElement>("div,section"),
+      document.querySelectorAll<HTMLElement>("div[style*='flex'],div[class*='flex']"),
     )
       .filter((el) => {
         const rect = el.getBoundingClientRect();
         if (
-          rect.top < 0 ||
-          rect.top >= 96 ||
+          rect.top < -50 ||
+          rect.top >= 100 ||
           rect.width < 480 ||
           rect.height < 40 ||
           rect.height > 120
@@ -1455,6 +1512,8 @@ function buildPlugin() {
     root.dataset.remoteBuild = REMOTE_PLUGIN_BUILD_ID;
     root.style.display = "inline-flex";
     root.style.alignItems = "center";
+    root.style.flex = "0 0 auto";
+    root.style.minWidth = "156px";
     root.style.margin = "0 8px";
 
     const button = document.createElement("button");
@@ -1464,6 +1523,7 @@ function buildPlugin() {
     button.style.maxWidth = "220px";
     button.style.padding = "0 12px";
     button.style.display = "inline-flex";
+    button.style.flex = "0 0 auto";
     button.style.alignItems = "center";
     button.style.justifyContent = "center";
     button.style.gap = "8px";
@@ -1545,6 +1605,24 @@ function buildPlugin() {
     } else {
       parent.appendChild(root);
     }
+
+    const ensureVisibleMount = () => {
+      const rootRect = root.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      if (rootRect.width >= 120 && buttonRect.width >= 120) return;
+
+      document.body.appendChild(root);
+      root.style.position = "fixed";
+      root.style.top = "12px";
+      root.style.right = "156px";
+      root.style.zIndex = "10000";
+      root.style.margin = "0";
+      root.style.minWidth = "156px";
+      console.debug("[Remote] Header status moved to fixed fallback mount.");
+    };
+
+    window.setTimeout(ensureVisibleMount, 50);
+    window.setTimeout(ensureVisibleMount, 1000);
 
     let currentConnection: any = null;
 
@@ -1778,6 +1856,16 @@ function buildPlugin() {
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
+  function warnIfRemotePageLooksCached() {
+    const text = document.body?.textContent || "";
+    if (!text.includes("Remote SSH")) return;
+    if (text.includes("Jump Hosts") || text.includes("New Jump Host")) return;
+    console.warn(
+      "[Remote] Remote SSH page is missing Jump Hosts UI. " +
+        "The web host may still be serving a cached older frontend bundle.",
+    );
+  }
+
   // ── Register plugin ──────────────────────────────────────────────────
 
   (window as any).QwenPaw.registerToolRender?.("remote", {
@@ -1787,21 +1875,111 @@ function buildPlugin() {
     remote_exec: RemoteExecRender,
   });
 
-  (window as any).QwenPaw.registerRoutes?.("remote", [
-    {
-      path: "/remote",
-      component: RemotePage,
-      label: "Remote SSH",
-      icon: "\u{1F517}",
-      priority: 20,
-    },
-  ]);
+  const remoteRoute = {
+    id: "remote",
+    key: "remote",
+    pluginId: "remote",
+    path: "/remote",
+    component: RemotePage,
+    label: "Remote SSH",
+    title: "Remote SSH",
+    name: "Remote SSH",
+    icon: "\u{1F517}",
+    priority: 20,
+  };
+
+  function registerRemotePage() {
+    const qwenpaw = (window as any).QwenPaw;
+    const legacyRouteId = "legacy:remote:remote";
+    const sdkRouteId = "remote.main";
+    let triedLegacyRoute = false;
+
+    if (typeof qwenpaw?.registerRoutes === "function") {
+      try {
+        triedLegacyRoute = true;
+        qwenpaw.registerRoutes("remote", [remoteRoute]);
+        console.log("[Remote] Registered page via legacy registerRoutes");
+      } catch (e) {
+        console.debug("[Remote] registerRoutes failed:", e);
+      }
+    }
+
+    if (triedLegacyRoute && typeof qwenpaw?.route?.replace === "function") {
+      try {
+        qwenpaw.route.replace("remote", legacyRouteId, RemotePage);
+        console.log("[Remote] Replaced legacy route via QwenPaw.route.replace");
+        return true;
+      } catch (e) {
+        console.debug("[Remote] QwenPaw.route.replace legacy failed:", e);
+      }
+    }
+
+    if (typeof qwenpaw?.route?.add === "function") {
+      try {
+        qwenpaw.route.add("remote", {
+          id: sdkRouteId,
+          path: remoteRoute.path,
+          component: RemotePage,
+        });
+        qwenpaw.menu?.add?.("remote", {
+          id: "remote.main",
+          location: "primary.settings",
+          parentId: "plugins-group",
+          label: remoteRoute.label,
+          icon: remoteRoute.icon,
+          route: sdkRouteId,
+          order: remoteRoute.priority,
+        });
+        console.log("[Remote] Registered page via QwenPaw.route/menu SDK");
+        return true;
+      } catch (e) {
+        console.debug("[Remote] QwenPaw.route/menu SDK failed:", e);
+      }
+    }
+
+    const candidates: Array<[string, any[]]> = [
+      ["registerRoute", ["remote", remoteRoute]],
+      ["registerRoute", [remoteRoute]],
+      ["registerPage", ["remote", remoteRoute]],
+      ["registerPage", [remoteRoute]],
+      ["registerPluginPage", ["remote", remoteRoute]],
+      ["registerPluginPage", [remoteRoute]],
+      ["registerMenuItem", [remoteRoute]],
+      ["registerNavigationItem", [remoteRoute]],
+      ["registerNavItem", [remoteRoute]],
+    ];
+
+    for (const [name, args] of candidates) {
+      const register = qwenpaw?.[name];
+      if (typeof register !== "function") continue;
+      try {
+        register.apply(qwenpaw, args);
+        console.log(`[Remote] Registered page via ${name}`);
+        return true;
+      } catch (e) {
+        console.debug(`[Remote] ${name} failed:`, e);
+      }
+    }
+
+    console.warn("[Remote] No QwenPaw page registration API found.");
+    return false;
+  }
+
+  registerRemotePage();
+
+  window.setTimeout(warnIfRemotePageLooksCached, 1000);
+  window.setTimeout(warnIfRemotePageLooksCached, 3000);
 
   const registeredHeaderStatus = registerHeaderStatus();
   if (!registeredHeaderStatus) {
     mountHeaderStatusFallbackWhenReady();
   } else {
-    window.setTimeout(mountHeaderStatusFallbackWhenReady, 750);
+    // 延迟检查是否需要 DOM 回退（某些环境下 API 注册不生效）
+    window.setTimeout(() => {
+      if (!document.getElementById("remote-ssh-header-status-react")) {
+        mountHeaderStatusFallbackWhenReady();
+      }
+    }, 1000);
   }
 }
 
@@ -1812,8 +1990,7 @@ function isQwenPawHostReady() {
     host?.React &&
       host?.antd &&
       host?.getApiUrl &&
-      host?.getApiToken &&
-      (window as any).QwenPaw?.registerRoutes,
+      host?.getApiToken,
   );
 }
 
