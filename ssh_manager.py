@@ -4,8 +4,10 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
+
+from .store import find_jump_host_by_name, get_jump_host
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,12 @@ class SSHConnectionInfo:
     host: str
     port: int
     username: str
+    jump_client: object | None = None
+    jump_host_id: str = ""
+    jump_host_name: str = ""
+    jump_host: str = ""
+    jump_port: int = 22
+    jump_username: str = ""
     connected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_used: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     default_cwd: str = "/"
@@ -45,6 +53,12 @@ class SSHConnectionInfo:
             "last_used": self.last_used.isoformat(),
             "default_cwd": self.default_cwd,
             "profile_id": self.profile_id,
+            "jump_host_id": self.jump_host_id,
+            "jump_host_name": self.jump_host_name,
+            "jump_host": self.jump_host,
+            "jump_port": self.jump_port,
+            "jump_username": self.jump_username,
+            "via_jump_host": bool(self.jump_host),
             "uptime_seconds": (
                 datetime.now(timezone.utc) - self.connected_at
             ).total_seconds(),
@@ -73,6 +87,14 @@ class SSHManager:
         key_path: str = "",
         passphrase: str = "",
         profile_id: str = "",
+        jump_host_id: str = "",
+        jump_name: str = "",
+        jump_host: str = "",
+        jump_port: int = 22,
+        jump_username: str = "",
+        jump_password: str = "",
+        jump_key_path: str = "",
+        jump_passphrase: str = "",
     ) -> dict:
         """Establish an SSH connection and store it for the session.
 
@@ -102,12 +124,29 @@ class SSHManager:
                     session_id,
                 )
 
-        def _do_connect() -> paramiko.SSHClient:
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        jump_config = self._resolve_jump_config(
+            jump_host_id=jump_host_id,
+            jump_name=jump_name,
+            jump_host=jump_host,
+            jump_port=jump_port,
+            jump_username=jump_username,
+            jump_password=jump_password,
+            jump_key_path=jump_key_path,
+            jump_passphrase=jump_passphrase,
+        )
 
-            connect_kwargs: dict = {
-                "hostname": host,
+        def _build_connect_kwargs(
+            *,
+            hostname: str,
+            port: int,
+            username: str,
+            password: str = "",
+            key_path: str = "",
+            passphrase: str = "",
+            sock: object | None = None,
+        ) -> dict:
+            connect_kwargs: dict[str, Any] = {
+                "hostname": hostname,
                 "port": port,
                 "username": username,
                 "timeout": 15,
@@ -118,24 +157,96 @@ class SSHManager:
                 connect_kwargs["key_filename"] = key_path
             if passphrase:
                 connect_kwargs["passphrase"] = passphrase
+            if sock is not None:
+                connect_kwargs["sock"] = sock
+            return connect_kwargs
 
-            client.connect(**connect_kwargs)
+        def _new_client() -> paramiko.SSHClient:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             return client
 
+        def _do_connect() -> tuple[paramiko.SSHClient, paramiko.SSHClient | None]:
+            jump_client = None
+            sock = None
+            if jump_config:
+                jump_client = _new_client()
+                try:
+                    jump_client.connect(
+                        **_build_connect_kwargs(
+                            hostname=jump_config["host"],
+                            port=jump_config["port"],
+                            username=jump_config["username"],
+                            password=jump_config.get("password", ""),
+                            key_path=jump_config.get("key_path", ""),
+                            passphrase=jump_config.get("passphrase", ""),
+                        )
+                    )
+                    transport = jump_client.get_transport()
+                    if transport is None or not transport.is_active():
+                        raise ConnectionError("Jump host SSH transport is closed")
+                    sock = transport.open_channel(
+                        "direct-tcpip",
+                        (host, port),
+                        ("", 0),
+                    )
+                except paramiko.AuthenticationException as e:
+                    jump_client.close()
+                    raise ConnectionError(
+                        "Jump host authentication failed for "
+                        f"{jump_config['username']}@"
+                        f"{jump_config['host']}:{jump_config['port']}. "
+                        "Check your jump host username and password/key. "
+                        f"({e})"
+                    ) from e
+                except Exception:
+                    jump_client.close()
+                    raise
+
+            client = _new_client()
+            try:
+                client.connect(
+                    **_build_connect_kwargs(
+                        hostname=host,
+                        port=port,
+                        username=username,
+                        password=password,
+                        key_path=key_path,
+                        passphrase=passphrase,
+                        sock=sock,
+                    )
+                )
+            except Exception:
+                client.close()
+                if jump_client is not None:
+                    jump_client.close()
+                raise
+            return client, jump_client
+
         try:
-            client = await asyncio.to_thread(_do_connect)
+            client, jump_client = await asyncio.to_thread(_do_connect)
         except paramiko.AuthenticationException as e:
             raise ConnectionError(
                 f"Authentication failed for {username}@{host}:{port}. "
                 f"Check your username and password/key. ({e})"
             ) from e
         except paramiko.SSHException as e:
+            via = (
+                f" via jump host {jump_config['host']}:{jump_config['port']}"
+                if jump_config
+                else ""
+            )
             raise ConnectionError(
-                f"SSH error connecting to {host}:{port}: {e}"
+                f"SSH error connecting to {host}:{port}{via}: {e}"
             ) from e
         except (OSError, ConnectionError, TimeoutError) as e:
+            via = (
+                f" via jump host {jump_config['host']}:{jump_config['port']}"
+                if jump_config
+                else ""
+            )
             raise ConnectionError(
-                f"Could not connect to {host}:{port}: {e}"
+                f"Could not connect to {host}:{port}{via}: {e}"
             ) from e
 
         info = SSHConnectionInfo(
@@ -143,6 +254,12 @@ class SSHManager:
             host=host,
             port=port,
             username=username,
+            jump_client=jump_client,
+            jump_host_id=jump_config.get("id", "") if jump_config else "",
+            jump_host_name=jump_config.get("name", "") if jump_config else "",
+            jump_host=jump_config.get("host", "") if jump_config else "",
+            jump_port=jump_config.get("port", 22) if jump_config else 22,
+            jump_username=jump_config.get("username", "") if jump_config else "",
             profile_id=profile_id,
         )
 
@@ -158,6 +275,53 @@ class SSHManager:
         )
         return info.to_dict()
 
+    @staticmethod
+    def _resolve_jump_config(
+        *,
+        jump_host_id: str = "",
+        jump_name: str = "",
+        jump_host: str = "",
+        jump_port: int = 22,
+        jump_username: str = "",
+        jump_password: str = "",
+        jump_key_path: str = "",
+        jump_passphrase: str = "",
+    ) -> dict[str, Any] | None:
+        jump_host, jump_port = _normalize_host_and_port(jump_host, jump_port)
+        if jump_host:
+            if not jump_username:
+                raise ValueError("jump_username is required when jump_host is set")
+            return {
+                "id": "",
+                "name": "",
+                "host": jump_host,
+                "port": jump_port,
+                "username": jump_username,
+                "password": jump_password,
+                "key_path": jump_key_path,
+                "passphrase": jump_passphrase,
+            }
+
+        jump_config = None
+        if jump_host_id:
+            jump_config = get_jump_host(jump_host_id)
+            if jump_config is None:
+                raise ValueError(f"jump host not found: {jump_host_id}")
+        elif jump_name:
+            jump_config = find_jump_host_by_name(jump_name)
+            if jump_config is None:
+                raise ValueError(f"jump host not found: {jump_name}")
+
+        if jump_config is None:
+            return None
+
+        resolved = dict(jump_config)
+        resolved["host"], resolved["port"] = _normalize_host_and_port(
+            str(resolved.get("host", "")),
+            int(resolved.get("port", 22)),
+        )
+        return resolved
+
     async def disconnect(self, session_id: str) -> bool:
         """Disconnect the SSH session. Returns True if disconnected."""
         async with self._lock:
@@ -170,6 +334,11 @@ class SSHManager:
             info.client.close()
         except Exception:
             pass
+        if info.jump_client is not None:
+            try:
+                info.jump_client.close()
+            except Exception:
+                pass
 
         logger.info(
             "[Remote] Disconnected %s@%s:%d (session=%s)",
@@ -196,10 +365,47 @@ class SSHManager:
                 info.client.close()
             except Exception:
                 pass
+            if info.jump_client is not None:
+                try:
+                    info.jump_client.close()
+                except Exception:
+                    pass
             logger.info(
                 "[Remote] Disconnected profile %s connection "
                 "%s@%s:%d (session=%s)",
                 profile_id,
+                info.username,
+                info.host,
+                info.port,
+                sid,
+            )
+        return len(matches)
+
+    async def disconnect_jump_host(self, jump_host_id: str) -> int:
+        """Disconnect all sessions currently using the saved jump host."""
+        async with self._lock:
+            matches = [
+                (sid, info)
+                for sid, info in self._connections.items()
+                if info.jump_host_id == jump_host_id
+            ]
+            for sid, _info in matches:
+                self._connections.pop(sid, None)
+
+        for sid, info in matches:
+            try:
+                info.client.close()
+            except Exception:
+                pass
+            if info.jump_client is not None:
+                try:
+                    info.jump_client.close()
+                except Exception:
+                    pass
+            logger.info(
+                "[Remote] Disconnected jump host %s connection "
+                "%s@%s:%d (session=%s)",
+                jump_host_id,
                 info.username,
                 info.host,
                 info.port,
@@ -225,6 +431,11 @@ class SSHManager:
                 info.client.close()
             except Exception:
                 pass
+            if info.jump_client is not None:
+                try:
+                    info.jump_client.close()
+                except Exception:
+                    pass
             self._connections.pop(session_id, None)
             return None
 
@@ -322,6 +533,11 @@ class SSHManager:
                     info.client.close()
                 except Exception:
                     pass
+                if info.jump_client is not None:
+                    try:
+                        info.jump_client.close()
+                    except Exception:
+                        pass
                 logger.info(
                     "[Remote] Closed connection %s@%s:%d (session=%s)",
                     info.username,
