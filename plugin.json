@@ -4,7 +4,7 @@
   "version": "0.1.3",
   "type": "general",
   "description": "SSH into remote devices and execute shell commands transparently on remote machines.",
-  "author": "QwenPaw Team",
+  "author": "AlpacaKnight",
   "entry": {
     "frontend": "ui/dist/index.js",
     "backend": "plugin.py"
