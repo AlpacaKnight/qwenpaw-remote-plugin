@@ -30,6 +30,9 @@ class RemotePlugin:
         from .tools.remote_list import remote_list
         from .tools.remote_exec import remote_exec
         from .tools.remote_info import remote_info
+        from .tools.remote_health import remote_health
+        from .tools.remote_set_cwd import remote_set_cwd
+        from .tools.remote_sudo import remote_sudo
         from .tools.remote_command import RemoteCommandHandler
 
         api.register_tool(
@@ -85,6 +88,36 @@ class RemotePlugin:
                 "and available development tools."
             ),
             icon="InfoCircleOutlined",
+            enabled=False,
+        )
+        api.register_tool(
+            tool_name="remote_health",
+            tool_func=remote_health,
+            description=(
+                "Check the health status of the current remote SSH "
+                "connection: status, latency, failures, reconnect availability."
+            ),
+            icon="HeartOutlined",
+            enabled=False,
+        )
+        api.register_tool(
+            tool_name="remote_set_cwd",
+            tool_func=remote_set_cwd,
+            description=(
+                "Set the default remote working directory for this session. "
+                "All subsequent commands will execute in this directory."
+            ),
+            icon="FolderOutlined",
+            enabled=False,
+        )
+        api.register_tool(
+            tool_name="remote_sudo",
+            tool_func=remote_sudo,
+            description=(
+                "Execute a command with sudo privileges on the remote machine. "
+                "Requires sudo password to be configured."
+            ),
+            icon="SafetyOutlined",
             enabled=False,
         )
         api.register_control_command(

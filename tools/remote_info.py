@@ -10,25 +10,16 @@ from ..ssh_manager import get_ssh_manager
 
 logger = logging.getLogger(__name__)
 
-_KEY_TOOLS = [
-    "git",
-    "python3",
-    "python",
-    "node",
-    "npm",
-    "docker",
-    "curl",
-    "wget",
-    "vim",
-    "nano",
-]
 
-
-async def remote_info() -> ToolResponse:
+async def remote_info(refresh: bool = False) -> ToolResponse:
     """Show detailed information about the remote machine environment.
 
     Returns OS, architecture, kernel, shell, CPU, memory, disk usage,
-    and availability of common development tools.
+    and availability of common development tools. Results are cached
+    for 60 seconds.
+
+    Args:
+        refresh: If True, force re-detection instead of using cache.
 
     Returns:
         ToolResponse with remote environment details.
@@ -42,84 +33,44 @@ async def remote_info() -> ToolResponse:
         )
 
     manager = get_ssh_manager()
-    conn = manager.get_connection(session_id)
-    if conn is None:
-        return ToolResponse(
-            content=[
-                TextBlock(
-                    type="text",
-                    text="No active SSH connection. Use remote_connect first.",
-                ),
-            ],
-        )
-
-    # Use cached env if available, otherwise detect now
-    if not conn.remote_os:
-        await manager.detect_remote_env(session_id)
+    snapshot = await manager.get_remote_env(session_id, refresh=refresh)
 
     lines: list[str] = []
     lines.append("=== Remote Environment ===")
-    lines.append(f"OS: {conn.remote_os or 'unknown'}")
-    lines.append(f"Arch: {conn.remote_arch or 'unknown'}")
-    lines.append(f"Kernel: {conn.remote_kernel or 'unknown'}")
-    lines.append(f"Shell: {conn.remote_shell or 'unknown'}")
-    lines.append(f"Hostname: {conn.host}")
+    lines.append(f"OS: {snapshot.remote_os or 'unknown'}")
+    lines.append(f"Arch: {snapshot.remote_arch or 'unknown'}")
+    lines.append(f"Kernel: {snapshot.remote_kernel or 'unknown'}")
+    lines.append(f"Shell: {snapshot.remote_shell or 'unknown'}")
+    lines.append(f"Hostname: {snapshot.hostname or 'unknown'}")
 
-    # CPU info
-    try:
-        returncode, cpu, _ = await manager.execute_command(
-            session_id,
-            "nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo ?",
-            timeout=5,
-        )
-        cpu = cpu.strip()
-        if returncode == 0 and cpu and cpu != "?":
-            lines.append(f"CPU cores: {cpu}")
-    except Exception:
-        pass
+    if snapshot.cpu_cores:
+        lines.append(f"CPU cores: {snapshot.cpu_cores}")
+    if snapshot.memory:
+        lines.append(f"Memory: {snapshot.memory}")
+    if snapshot.disk_root:
+        lines.append(f"Disk (/): {snapshot.disk_root}")
 
-    # Memory info
-    try:
-        returncode, mem, _ = await manager.execute_command(
-            session_id,
-            "free -h 2>/dev/null | awk '/^Mem:/{print $2}' || "
-            "sysctl -n hw.memsize 2>/dev/null | awk '{printf \"%.1fG\", $1/1073741824}' || "
-            "echo ?",
-            timeout=5,
-        )
-        mem = mem.strip()
-        if returncode == 0 and mem and mem != "?":
-            lines.append(f"Memory: {mem}")
-    except Exception:
-        pass
+    if snapshot.tools:
+        lines.append("")
+        lines.append("=== Tool Availability ===")
+        for tool, available in sorted(snapshot.tools.items()):
+            lines.append(f"  {tool}: {'found' if available else 'not found'}")
 
-    # Disk usage
-    try:
-        returncode, disk, _ = await manager.execute_command(
-            session_id,
-            "df -h / 2>/dev/null | awk 'NR==2{print $2\" total, \"$3\" used, \"$4\" avail\"}' || echo ?",
-            timeout=5,
-        )
-        disk = disk.strip()
-        if returncode == 0 and disk and disk != "?":
-            lines.append(f"Disk (/): {disk}")
-    except Exception:
-        pass
+    if snapshot.detected_at:
+        age = ""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        seconds = (now - snapshot.detected_at).total_seconds()
+        if seconds < 60:
+            age = f"{seconds:.0f}s ago"
+        elif seconds < 3600:
+            age = f"{seconds / 60:.0f}m ago"
+        else:
+            age = f"{seconds / 3600:.1f}h ago"
+        lines.append(f"\nCached at: {snapshot.detected_at.isoformat()} ({age})")
 
-    # Tool availability
-    lines.append("")
-    lines.append("=== Tool Availability ===")
-    for tool in _KEY_TOOLS:
-        try:
-            returncode, result, _ = await manager.execute_command(
-                session_id,
-                f"command -v {tool} >/dev/null 2>&1",
-                timeout=5,
-            )
-            found = returncode == 0
-            lines.append(f"  {tool}: {'found' if found else 'not found'}")
-        except Exception:
-            lines.append(f"  {tool}: unknown")
+    if snapshot.last_error:
+        lines.append(f"\nWarning: {snapshot.last_error}")
 
     return ToolResponse(
         content=[

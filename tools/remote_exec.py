@@ -15,6 +15,7 @@ async def remote_exec(
     command: str,
     timeout: float = 60.0,
     cwd: str = "",
+    sudo: bool = False,
 ) -> ToolResponse:
     """Execute a command explicitly on the remote machine via SSH.
 
@@ -25,6 +26,7 @@ async def remote_exec(
         command: The shell command to execute on the remote host.
         timeout: Maximum execution time in seconds (default 60).
         cwd: Remote working directory (default: connection's default).
+        sudo: If True, execute with sudo using configured sudo password.
 
     Returns:
         ToolResponse with command output.
@@ -47,4 +49,4 @@ async def remote_exec(
             ],
         )
 
-    return await _execute_remote(session_id, command, timeout, cwd)
+    return await _execute_remote(session_id, command, timeout, cwd, sudo=sudo)

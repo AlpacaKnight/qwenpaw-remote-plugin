@@ -100,6 +100,7 @@ def _normalize_profile_payload(
         str(payload.get("name", "")).strip() or _default_name(payload)
     )
     profile["jump_host_id"] = str(payload.get("jump_host_id", "")).strip()
+    profile["default_cwd"] = str(payload.get("default_cwd", "")).strip()
 
     if existing is not None:
         if not profile["password"]:

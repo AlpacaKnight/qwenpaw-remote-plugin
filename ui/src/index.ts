@@ -56,7 +56,83 @@ function buildPlugin() {
     LaptopOutlined,
     ThunderboltOutlined,
     InfoCircleOutlined,
+    HeartOutlined,
+    FolderOutlined,
+    SafetyOutlined,
   } = antdIcons || {};
+
+  // ── Language Detection ─────────────────────────────────────────────
+
+  function isChinese(): boolean {
+    try {
+      const qwenpaw = (window as any).QwenPaw || {};
+      const host = qwenpaw.host || {};
+      const readMaybeFunction = (value: any) =>
+        typeof value === "function" ? value() : value;
+      const storageLang = (() => {
+        try {
+          const stores = [window.localStorage, window.sessionStorage];
+          for (const store of stores) {
+            for (let i = 0; i < store.length; i += 1) {
+              const key = store.key(i) || "";
+              if (!/(locale|language|lang)/i.test(key)) continue;
+              const value = store.getItem(key) || "";
+              if (/^zh/i.test(value) || /"zh/i.test(value)) return value;
+            }
+          }
+        } catch {
+          return "";
+        }
+        return "";
+      })();
+      const lang =
+        readMaybeFunction(host.getLocale) ||
+        readMaybeFunction(host.getLanguage) ||
+        host.locale ||
+        host.language ||
+        host.lang ||
+        host.settings?.locale ||
+        host.settings?.language ||
+        host.config?.locale ||
+        host.config?.language ||
+        host.i18n?.locale ||
+        host.i18n?.language ||
+        qwenpaw.locale ||
+        qwenpaw.language ||
+        qwenpaw.lang ||
+        qwenpaw.settings?.locale ||
+        qwenpaw.settings?.language ||
+        qwenpaw.config?.locale ||
+        qwenpaw.config?.language ||
+        qwenpaw.i18n?.locale ||
+        qwenpaw.i18n?.language ||
+        storageLang ||
+        document.documentElement.lang ||
+        "";
+      return String(lang).toLowerCase().startsWith("zh");
+    } catch {
+      return false;
+    }
+  }
+
+  function useZh(): boolean {
+    const [zh, setZh] = useState(isChinese());
+
+    useEffect(() => {
+      const syncLanguage = () => setZh(isChinese());
+      syncLanguage();
+      const interval = window.setInterval(syncLanguage, 1000);
+      window.addEventListener("languagechange", syncLanguage);
+      window.addEventListener("storage", syncLanguage);
+      return () => {
+        window.clearInterval(interval);
+        window.removeEventListener("languagechange", syncLanguage);
+        window.removeEventListener("storage", syncLanguage);
+      };
+    }, []);
+
+    return zh;
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -340,6 +416,7 @@ function buildPlugin() {
   }
 
   function RemoteInfoRender({ data }: { data: any }) {
+    const zh = useZh();
     const output = parseToolOutput(data);
     const hasInfo = output.includes("Remote Environment");
 
@@ -359,7 +436,7 @@ function buildPlugin() {
           Space,
           null,
           React.createElement(InfoCircleOutlined || CloudOutlined || "\u{2139}"),
-          React.createElement(Text, { strong: true }, "Remote Machine Info"),
+          React.createElement(Text, { strong: true }, zh ? "远程设备信息" : "Remote Machine Info"),
         ),
         React.createElement(
           "pre",
@@ -382,9 +459,62 @@ function buildPlugin() {
     );
   }
 
+  function RemoteHealthRender({ data }: { data: any }) {
+    const zh = useZh();
+    const output = parseToolOutput(data);
+    const isDegraded = output.includes("Unstable");
+    const isStale = output.includes("Disconnected");
+    const isConnected = output.includes("Status: Connected");
+    const borderColor = isStale ? "#ff4d4f" : isDegraded ? "#faad14" : isConnected ? "#52c41a" : "#d9d9d9";
+    return React.createElement(
+      Card, { size: "small", style: { marginTop: 8, borderLeft: `3px solid ${borderColor}` } },
+      React.createElement(Space, { direction: "vertical", style: { width: "100%" } },
+        React.createElement(Space, null,
+          React.createElement(HeartOutlined || "\u{2764}"),
+          React.createElement(Text, { strong: true }, zh ? "连接健康状态" : "Connection Health"),
+        ),
+        React.createElement("pre", { style: { margin: 0, padding: "8px 12px", background: "#f5f5f5", borderRadius: 4, fontSize: 12, maxHeight: 200, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all" } }, output),
+      ),
+    );
+  }
+
+  function RemoteSetCwdRender({ data }: { data: any }) {
+    const zh = useZh();
+    const output = parseToolOutput(data);
+    const isSuccess = output.includes("set to:");
+    const isFailure = output.includes("Error");
+    return React.createElement(
+      Card, { size: "small", style: { marginTop: 8, borderLeft: `3px solid ${isSuccess ? "#52c41a" : isFailure ? "#ff4d4f" : "#d9d9d9"}` } },
+      React.createElement(Space, { direction: "vertical", style: { width: "100%" } },
+        React.createElement(Space, null,
+          React.createElement(FolderOutlined || "\u{1F4C1}"),
+          React.createElement(Text, { strong: true }, zh ? "设置工作目录" : "Set Working Directory"),
+        ),
+        React.createElement(Text, { type: isFailure ? "danger" : "success", style: { whiteSpace: "pre-wrap" } }, output),
+      ),
+    );
+  }
+
+  function RemoteSudoRender({ data }: { data: any }) {
+    const zh = useZh();
+    const output = parseToolOutput(data);
+    const isFailure = output.includes("failed with exit code") || output.includes("Error");
+    return React.createElement(
+      Card, { size: "small", style: { marginTop: 8, borderLeft: `3px solid ${isFailure ? "#ff4d4f" : "#faad14"}` } },
+      React.createElement(Space, { direction: "vertical", style: { width: "100%" } },
+        React.createElement(Space, null,
+          React.createElement(SafetyOutlined || "\u{1F6E1}"),
+          React.createElement(Text, { strong: true }, zh ? "Sudo 命令" : "Sudo Command"),
+        ),
+        React.createElement("pre", { style: { margin: 0, padding: "8px 12px", background: "#f5f5f5", borderRadius: 4, fontSize: 12, maxHeight: 300, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all" } }, output),
+      ),
+    );
+  }
+
   // ── Remote Management Page ──────────────────────────────────────────
 
   function RemotePage() {
+    const zh = useZh();
     const [profiles, setProfiles] = useState([] as any[]);
     const [jumpHosts, setJumpHosts] = useState([] as any[]);
     const [activeProfileId, setActiveProfileId] = useState("");
@@ -397,6 +527,8 @@ function buildPlugin() {
     const [saving, setSaving] = useState(false);
     const [savingJumpHost, setSavingJumpHost] = useState(false);
     const [connectingId, setConnectingId] = useState(null as string | null);
+    const [cwdValue, setCwdValue] = useState("/");
+    const [cwdEditing, setCwdEditing] = useState(false);
     const [form] = Form.useForm();
     const [jumpForm] = Form.useForm();
 
@@ -408,17 +540,30 @@ function buildPlugin() {
         const encodedSessionId = encodeURIComponent(sessionId);
         const profileUrl = `/remote/profiles?session_id=${encodedSessionId}`;
         const jumpUrl = `/remote/jump-hosts`;
+        const connectionUrl = `/remote/connections?session_id=${encodedSessionId}`;
 
         console.log("[Remote] Fetching data from:", profileUrl, jumpUrl);
-        const [profileData, jumpHostData] = await Promise.all([
+        const [profileData, jumpHostData, connectionData] = await Promise.all([
           apiFetch(profileUrl),
           apiFetch(jumpUrl),
+          apiFetch(connectionUrl).catch(() => ({ connections: [] })),
         ]);
         console.log("[Remote] Profiles data:", profileData);
         console.log("[Remote] Jump hosts data:", jumpHostData);
-        setProfiles(profileData.profiles || []);
-        setActiveProfileId(profileData.active_profile_id || "");
+        const nextProfiles = profileData.profiles || [];
+        const nextActiveProfileId = profileData.active_profile_id || "";
+        const activeProfile = nextProfiles.find(
+          (profile: any) => profile.id === nextActiveProfileId,
+        );
+        const activeConnection = (connectionData.connections || [])[0] || null;
+        setProfiles(nextProfiles);
+        setActiveProfileId(nextActiveProfileId);
         setJumpHosts(jumpHostData.jump_hosts || []);
+        setCwdValue(
+          activeConnection?.default_cwd ||
+            activeProfile?.default_cwd ||
+            "/",
+        );
       } catch (e: any) {
         const errMsg = e.message || String(e);
         console.error("[Remote] Failed to fetch data:", e);
@@ -480,6 +625,7 @@ function buildPlugin() {
         key_path: profile.key_path,
         passphrase: "",
         jump_host_id: profile.jump_host_id || "",
+        default_cwd: profile.default_cwd || "",
       });
       setModalOpen(true);
     };
@@ -566,14 +712,27 @@ function buildPlugin() {
         // Connect
         setConnectingId(profile.id);
         try {
-          await apiFetch(`/remote/profiles/${profile.id}/connect`, {
+          const result = await apiFetch(`/remote/profiles/${profile.id}/connect`, {
             method: "POST",
             body: JSON.stringify({ session_id: sessionId }),
           });
-          antdMessage.success(`Connected to ${profile.name}`);
+          antdMessage.success(zh ? `已连接到 ${profile.name}` : `Connected to ${profile.name}`);
+
+          if (result.sudo_needs_password) {
+            const sudoPwd = prompt(
+              zh ? "SSH 使用密钥认证，需要输入 sudo 密码：" : "SSH uses key auth. Enter sudo password:"
+            );
+            if (sudoPwd) {
+              await apiFetch(`/remote/connections/${sessionId}/sudo`, {
+                method: "POST",
+                body: JSON.stringify({ password: sudoPwd, enabled: true }),
+              });
+            }
+          }
+
           fetchData();
         } catch (e: any) {
-          antdMessage.error(`Connection failed: ${e.message}`);
+          antdMessage.error(zh ? `连接失败: ${e.message}` : `Connection failed: ${e.message}`);
         } finally {
           setConnectingId(null);
         }
@@ -589,6 +748,33 @@ function buildPlugin() {
         fetchData();
       } catch (e: any) {
         antdMessage.error(`Delete failed: ${e.message}`);
+      }
+    };
+
+    const handleSetCwd = async (nextCwd?: string) => {
+      const sessionId = getSessionId();
+      if (!sessionId) return;
+      const targetCwd = (nextCwd ?? cwdValue).trim();
+      if (!targetCwd) return;
+      setCwdEditing(true);
+      try {
+        await apiFetch(`/remote/connections/${sessionId}/cwd`, {
+          method: "PUT",
+          body: JSON.stringify({ cwd: targetCwd, verify: true }),
+        });
+        setCwdValue(targetCwd);
+        // Sync to profile config if connected via profile
+        if (activeProfileId) {
+          await apiFetch(`/remote/profiles/${activeProfileId}/cwd`, {
+            method: "PATCH",
+            body: JSON.stringify({ cwd: targetCwd }),
+          }).catch(() => {});
+        }
+        antdMessage.success(zh ? "工作目录已更新" : "Working directory updated");
+      } catch (e: any) {
+        antdMessage.error(zh ? `失败: ${e.message}` : `Failed: ${e.message}`);
+      } finally {
+        setCwdEditing(false);
       }
     };
 
@@ -610,7 +796,7 @@ function buildPlugin() {
         React.createElement(
           Title,
           { level: 4, style: { margin: 0 } },
-          "Remote SSH",
+          zh ? "远程 SSH" : "Remote SSH",
         ),
         React.createElement(
           Space,
@@ -618,7 +804,7 @@ function buildPlugin() {
           React.createElement(
             Button,
             { icon: renderIcon(ReloadOutlined), onClick: fetchData },
-            "Refresh",
+            zh ? "刷新" : "Refresh",
           ),
           React.createElement(
             Button,
@@ -626,7 +812,7 @@ function buildPlugin() {
               icon: renderIcon(PlusOutlined),
               onClick: openNewJumpHostModal,
             },
-            "New Jump Host",
+            zh ? "新建跳板机" : "New Jump Host",
           ),
           React.createElement(
             Button,
@@ -635,7 +821,7 @@ function buildPlugin() {
               icon: renderIcon(PlusOutlined),
               onClick: openNewProfileModal,
             },
-            "New Connection",
+            zh ? "新建连接" : "New Connection",
           ),
         ),
       ),
@@ -645,16 +831,18 @@ function buildPlugin() {
         showIcon: true,
         style: { marginBottom: 16 },
         message:
-          "Save connection profiles here. Toggle the switch to connect/disconnect. " +
-          "Only one connection can be active at a time. " +
-          "When connected, all shell commands in the current chat execute on the remote machine.",
+          zh
+            ? "在这里保存 SSH 连接配置。使用开关连接或断开设备；同一时间只能有一个连接处于活跃状态。连接后，当前对话中的 shell 命令会在远程设备上执行。"
+            : "Save connection profiles here. Toggle the switch to connect/disconnect. " +
+              "Only one connection can be active at a time. " +
+              "When connected, all shell commands in the current chat execute on the remote machine.",
       }),
       error
         ? React.createElement(Alert, {
             type: "error",
             showIcon: true,
             style: { marginBottom: 16 },
-            message: "Error loading data",
+            message: zh ? "加载数据失败" : "Error loading data",
             description: error,
           })
         : null,
@@ -662,7 +850,7 @@ function buildPlugin() {
         Card,
         {
           size: "small",
-          title: "Jump Hosts",
+          title: zh ? "跳板机" : "Jump Hosts",
           style: { marginBottom: 16 },
         },
         jumpHosts.length === 0
@@ -670,7 +858,7 @@ function buildPlugin() {
               Empty,
               {
                 image: Empty.PRESENTED_IMAGE_SIMPLE,
-                description: "No saved jump hosts.",
+                description: zh ? "暂无保存的跳板机。" : "No saved jump hosts.",
               },
             )
           : React.createElement(
@@ -706,7 +894,7 @@ function buildPlugin() {
                           { type: "secondary", style: { fontSize: 12 } },
                           `${jumpHost.username}@${jumpHost.host}:${jumpHost.port}`,
                           jumpHost.key_path
-                            ? `  |  Key: ${jumpHost.key_path}`
+                            ? `  |  ${zh ? "密钥" : "Key"}: ${jumpHost.key_path}`
                             : "",
                         ),
                       ),
@@ -716,7 +904,7 @@ function buildPlugin() {
                       null,
                       React.createElement(
                         Tooltip,
-                        { title: "Edit this jump host" },
+                        { title: zh ? "编辑此跳板机" : "Edit this jump host" },
                         React.createElement(Button, {
                           type: "text",
                           size: "small",
@@ -727,10 +915,10 @@ function buildPlugin() {
                       React.createElement(
                         Popconfirm,
                         {
-                          title: "Delete this jump host?",
+                          title: zh ? "删除此跳板机？" : "Delete this jump host?",
                           onConfirm: () => handleDeleteJumpHost(jumpHost.id),
-                          okText: "Delete",
-                          cancelText: "Cancel",
+                          okText: zh ? "删除" : "Delete",
+                          cancelText: zh ? "取消" : "Cancel",
                           okButtonProps: { danger: true },
                         },
                         React.createElement(Button, {
@@ -748,7 +936,7 @@ function buildPlugin() {
       React.createElement(
         Title,
         { level: 5, style: { marginTop: 0 } },
-        "Devices",
+        zh ? "设备" : "Devices",
       ),
       // Profile list
       loading
@@ -765,7 +953,7 @@ function buildPlugin() {
                   description: React.createElement(
                     Paragraph,
                     { type: "secondary" },
-                    "No saved connections. Click 'New Connection' to add one.",
+                    zh ? "暂无保存的连接。点击“新建连接”添加一个。" : "No saved connections. Click 'New Connection' to add one.",
                   ),
                 },
               ),
@@ -813,7 +1001,7 @@ function buildPlugin() {
                             ? React.createElement(
                                 Tag,
                                 { color: "success" },
-                                "Connected",
+                                zh ? "已连接" : "Connected",
                               )
                             : null,
                         ),
@@ -825,13 +1013,33 @@ function buildPlugin() {
                             { type: "secondary", style: { fontSize: 12 } },
                             `${profile.username}@${profile.host}:${profile.port}`,
                             profile.key_path
-                              ? `  |  Key: ${profile.key_path}`
+                              ? `  |  ${zh ? "密钥" : "Key"}: ${profile.key_path}`
                               : "",
                             profile.jump_host_name
-                              ? `  |  via ${profile.jump_host_name}`
+                              ? `  |  ${zh ? "经由" : "via"} ${profile.jump_host_name}`
                               : "",
                           ),
                         ),
+                        connected
+                          ? React.createElement(
+                              "div",
+                              { style: { marginTop: 4, display: "flex", alignItems: "center", gap: 6 } },
+                              React.createElement(
+                                Text,
+                                { type: "secondary", style: { fontSize: 12 } },
+                                `cwd: ${cwdValue}`,
+                              ),
+                              React.createElement(Button, {
+                                type: "text", size: "small", icon: renderIcon(EditOutlined),
+                                onClick: () => {
+                                  const newCwd = prompt(zh ? "设置工作目录:" : "Set working directory:", cwdValue);
+                                  if (newCwd && newCwd.trim()) {
+                                    handleSetCwd(newCwd.trim());
+                                  }
+                                },
+                              }),
+                            )
+                          : null,
                       ),
                       // Right: actions
                       React.createElement(
@@ -845,19 +1053,19 @@ function buildPlugin() {
                               Tooltip,
                               {
                                 title: connected
-                                  ? "Disconnect"
-                                  : "Connect to this device",
+                                  ? (zh ? "断开连接" : "Disconnect")
+                                  : (zh ? "连接到此设备" : "Connect to this device"),
                               },
                               React.createElement(Switch, {
                                 checked: connected,
                                 onChange: () => handleToggleConnect(profile),
-                                checkedChildren: "ON",
-                                unCheckedChildren: "OFF",
+                                checkedChildren: zh ? "开" : "ON",
+                                unCheckedChildren: zh ? "关" : "OFF",
                               }),
                             ),
                         React.createElement(
                           Tooltip,
-                          { title: "Edit this connection profile" },
+                          { title: zh ? "编辑此连接配置" : "Edit this connection profile" },
                           React.createElement(Button, {
                             type: "text",
                             size: "small",
@@ -868,10 +1076,10 @@ function buildPlugin() {
                         React.createElement(
                           Popconfirm,
                           {
-                            title: "Delete this connection profile?",
+                            title: zh ? "删除此连接配置？" : "Delete this connection profile?",
                             onConfirm: () => handleDelete(profile.id),
-                            okText: "Delete",
-                            cancelText: "Cancel",
+                            okText: zh ? "删除" : "Delete",
+                            cancelText: zh ? "取消" : "Cancel",
                             okButtonProps: { danger: true },
                           },
                           React.createElement(Button, {
@@ -892,8 +1100,8 @@ function buildPlugin() {
         Modal,
         {
           title: editingProfile
-            ? "Edit SSH Connection"
-            : "New SSH Connection",
+            ? (zh ? "编辑 SSH 连接" : "Edit SSH Connection")
+            : (zh ? "新建 SSH 连接" : "New SSH Connection"),
           open: modalOpen,
           onCancel: () => {
             setModalOpen(false);
@@ -907,17 +1115,17 @@ function buildPlugin() {
           { form, layout: "vertical", onFinish: handleSave },
           React.createElement(
             Form.Item,
-            { name: "name", label: "Display Name" },
+            { name: "name", label: zh ? "显示名称" : "Display Name" },
             React.createElement(Input, {
-              placeholder: "My Server (optional, auto-generated if empty)",
+              placeholder: zh ? "我的服务器（可选，留空自动生成）" : "My Server (optional, auto-generated if empty)",
             }),
           ),
           React.createElement(
             Form.Item,
             {
               name: "host",
-              label: "Host",
-              rules: [{ required: true, message: "Please enter the host" }],
+              label: zh ? "主机" : "Host",
+              rules: [{ required: true, message: zh ? "请输入主机地址" : "Please enter the host" }],
             },
             React.createElement(Input, {
               placeholder: "192.168.1.100 or example.com",
@@ -930,7 +1138,7 @@ function buildPlugin() {
               Form.Item,
               {
                 name: "port",
-                label: "Port",
+                label: zh ? "端口" : "Port",
                 initialValue: 22,
                 style: { width: 120 },
               },
@@ -940,7 +1148,7 @@ function buildPlugin() {
               Form.Item,
               {
                 name: "username",
-                label: "Username",
+                label: zh ? "用户名" : "Username",
                 initialValue: "root",
                 style: { flex: 1 },
               },
@@ -949,35 +1157,35 @@ function buildPlugin() {
           ),
           React.createElement(
             Form.Item,
-            { name: "password", label: "Password" },
+            { name: "password", label: zh ? "密码" : "Password" },
             React.createElement(Input.Password, {
               placeholder: editingProfile
-                ? "Leave empty to keep the saved password"
-                : "Leave empty if using key auth",
+                ? (zh ? "留空则保留已保存的密码" : "Leave empty to keep the saved password")
+                : (zh ? "使用密钥认证时可留空" : "Leave empty if using key auth"),
             }),
           ),
           React.createElement(
             Form.Item,
-            { name: "key_path", label: "SSH Key Path" },
+            { name: "key_path", label: zh ? "SSH 密钥路径" : "SSH Key Path" },
             React.createElement(Input, {
-              placeholder: "/home/user/.ssh/id_rsa (optional)",
+              placeholder: zh ? "/home/user/.ssh/id_rsa（可选）" : "/home/user/.ssh/id_rsa (optional)",
             }),
           ),
           React.createElement(
             Form.Item,
-            { name: "passphrase", label: "Key Passphrase" },
+            { name: "passphrase", label: zh ? "密钥口令" : "Key Passphrase" },
             React.createElement(Input.Password, {
               placeholder: editingProfile
-                ? "Leave empty to keep the saved passphrase"
-                : "If key is encrypted",
+                ? (zh ? "留空则保留已保存的密钥口令" : "Leave empty to keep the saved passphrase")
+                : (zh ? "密钥加密时填写" : "If key is encrypted"),
             }),
           ),
           React.createElement(
             Form.Item,
-            { name: "jump_host_id", label: "Jump Host" },
+            { name: "jump_host_id", label: zh ? "跳板机" : "Jump Host" },
             React.createElement(Select, {
               allowClear: true,
-              placeholder: "Direct connection (no jump host)",
+              placeholder: zh ? "直连（不使用跳板机）" : "Direct connection (no jump host)",
               options: jumpHosts.map((jumpHost: any) => ({
                 label:
                   jumpHost.name ||
@@ -988,16 +1196,59 @@ function buildPlugin() {
           ),
           React.createElement(
             Form.Item,
+            { name: "default_cwd", label: zh ? "默认工作目录" : "Default Working Directory" },
+            React.createElement(Input, {
+              placeholder: zh ? "/workspace/app（可选，默认 /）" : "/workspace/app (optional, default: /)",
+            }),
+          ),
+          React.createElement(
+            Form.Item,
             null,
             React.createElement(
-              Button,
-              {
-                type: "primary",
-                htmlType: "submit",
-                loading: saving,
-                style: { width: "100%" },
-              },
-              editingProfile ? "Update Profile" : "Save Profile",
+              Space,
+              { wrap: true, style: { width: "100%" } },
+              React.createElement(
+                Button,
+                {
+                  htmlType: "button",
+                  onClick: async () => {
+                    const values = form.getFieldsValue();
+                    if (!values.host) {
+                      antdMessage.error(zh ? "请填写主机地址" : "Host is required for testing");
+                      return;
+                    }
+                    try {
+                      const useSavedProfile = editingProfile && !values.password && !values.passphrase;
+                      const result = useSavedProfile
+                        ? await apiFetch(`/remote/profiles/${editingProfile.id}/test`, { method: "POST" })
+                        : await apiFetch("/remote/profiles/test", { method: "POST", body: JSON.stringify(values) });
+                      if (result.ok) {
+                        antdMessage.success(
+                          zh
+                            ? `连接成功 \u00B7 ${result.remote_os} \u00B7 ${result.remote_shell} \u00B7 ${result.latency_ms} ms`
+                            : `Connection OK \u00B7 ${result.remote_os} \u00B7 ${result.remote_shell} \u00B7 ${result.latency_ms} ms`
+                        );
+                      } else {
+                        antdMessage.error(zh ? `测试失败: ${result.error}` : `Test failed: ${result.error}`);
+                      }
+                    } catch (e: any) {
+                      antdMessage.error(zh ? `测试失败: ${e.message}` : `Test failed: ${e.message}`);
+                    }
+                  },
+                  style: { flex: 1, minWidth: 140 },
+                },
+                zh ? "测试连接" : "Test Connection",
+              ),
+              React.createElement(
+                Button,
+                {
+                  type: "primary",
+                  htmlType: "submit",
+                  loading: saving,
+                  style: { flex: 1, minWidth: 140 },
+                },
+                editingProfile ? (zh ? "更新配置" : "Update Profile") : (zh ? "保存配置" : "Save Profile"),
+              ),
             ),
           ),
         ),
@@ -1005,7 +1256,9 @@ function buildPlugin() {
       React.createElement(
         Modal,
         {
-          title: editingJumpHost ? "Edit Jump Host" : "New Jump Host",
+          title: editingJumpHost
+            ? (zh ? "编辑跳板机" : "Edit Jump Host")
+            : (zh ? "新建跳板机" : "New Jump Host"),
           open: jumpModalOpen,
           onCancel: () => {
             setJumpModalOpen(false);
@@ -1019,17 +1272,17 @@ function buildPlugin() {
           { form: jumpForm, layout: "vertical", onFinish: handleSaveJumpHost },
           React.createElement(
             Form.Item,
-            { name: "name", label: "Display Name" },
+            { name: "name", label: zh ? "显示名称" : "Display Name" },
             React.createElement(Input, {
-              placeholder: "Bastion (optional, auto-generated if empty)",
+              placeholder: zh ? "跳板机（可选，留空自动生成）" : "Bastion (optional, auto-generated if empty)",
             }),
           ),
           React.createElement(
             Form.Item,
             {
               name: "host",
-              label: "Host",
-              rules: [{ required: true, message: "Please enter the host" }],
+              label: zh ? "主机" : "Host",
+              rules: [{ required: true, message: zh ? "请输入主机地址" : "Please enter the host" }],
             },
             React.createElement(Input, {
               placeholder: "bastion.example.com or 192.168.1.10",
@@ -1042,7 +1295,7 @@ function buildPlugin() {
               Form.Item,
               {
                 name: "port",
-                label: "Port",
+                label: zh ? "端口" : "Port",
                 initialValue: 22,
                 style: { width: 120 },
               },
@@ -1052,7 +1305,7 @@ function buildPlugin() {
               Form.Item,
               {
                 name: "username",
-                label: "Username",
+                label: zh ? "用户名" : "Username",
                 initialValue: "root",
                 style: { flex: 1 },
               },
@@ -1061,27 +1314,27 @@ function buildPlugin() {
           ),
           React.createElement(
             Form.Item,
-            { name: "password", label: "Password" },
+            { name: "password", label: zh ? "密码" : "Password" },
             React.createElement(Input.Password, {
               placeholder: editingJumpHost
-                ? "Leave empty to keep the saved password"
-                : "Leave empty if using key auth",
+                ? (zh ? "留空则保留已保存的密码" : "Leave empty to keep the saved password")
+                : (zh ? "使用密钥认证时可留空" : "Leave empty if using key auth"),
             }),
           ),
           React.createElement(
             Form.Item,
-            { name: "key_path", label: "SSH Key Path" },
+            { name: "key_path", label: zh ? "SSH 密钥路径" : "SSH Key Path" },
             React.createElement(Input, {
-              placeholder: "/home/user/.ssh/id_rsa (optional)",
+              placeholder: zh ? "/home/user/.ssh/id_rsa（可选）" : "/home/user/.ssh/id_rsa (optional)",
             }),
           ),
           React.createElement(
             Form.Item,
-            { name: "passphrase", label: "Key Passphrase" },
+            { name: "passphrase", label: zh ? "密钥口令" : "Key Passphrase" },
             React.createElement(Input.Password, {
               placeholder: editingJumpHost
-                ? "Leave empty to keep the saved passphrase"
-                : "If key is encrypted",
+                ? (zh ? "留空则保留已保存的密钥口令" : "Leave empty to keep the saved passphrase")
+                : (zh ? "密钥加密时填写" : "If key is encrypted"),
             }),
           ),
           React.createElement(
@@ -1095,7 +1348,9 @@ function buildPlugin() {
                 loading: savingJumpHost,
                 style: { width: "100%" },
               },
-              editingJumpHost ? "Update Jump Host" : "Save Jump Host",
+              editingJumpHost
+                ? (zh ? "更新跳板机" : "Update Jump Host")
+                : (zh ? "保存跳板机" : "Save Jump Host"),
             ),
           ),
         ),
@@ -1106,12 +1361,16 @@ function buildPlugin() {
   // ── Header SSH Status Indicator ──────────────────────────────────────
 
   function RemoteStatusIndicator() {
+    const zh = useZh();
     const [connection, setConnection] = useState(null as any);
     const [profiles, setProfiles] = useState([] as any[]);
     const [activeProfileId, setActiveProfileId] = useState("");
     const [connectingId, setConnectingId] = useState(null as string | null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [health, setHealth] = useState(null as any);
+    const [remoteInfo, setRemoteInfo] = useState(null as any);
+    const [reconnecting, setReconnecting] = useState(false);
     const prevConnectedRef = React.useRef(false);
 
     const fetchStatus = useCallback(async () => {
@@ -1120,30 +1379,42 @@ function buildPlugin() {
         setError("");
         const sessionId = getSessionId() || "";
         const encodedSessionId = encodeURIComponent(sessionId);
-        const [connectionData, profileData] = await Promise.all([
+        const [connectionData, profileData, healthData] = await Promise.all([
           apiFetch(`/remote/connections?session_id=${encodedSessionId}`),
           apiFetch(`/remote/profiles?session_id=${encodedSessionId}`),
+          apiFetch(`/remote/connections/${encodedSessionId}/health`).catch(() => ({ health: null })),
         ]);
         const conns = connectionData.connections || [];
         const newConn = conns.length > 0 ? conns[0] : null;
+        let nextRemoteInfo = null as any;
+        if (newConn) {
+          const infoData = await apiFetch(
+            `/remote/connections/${encodedSessionId}/info`,
+          ).catch(() => ({ info: null }));
+          nextRemoteInfo = infoData.info || null;
+        }
         const wasConnected = prevConnectedRef.current;
         const isNowConnected = newConn !== null;
         if (wasConnected && !isNowConnected) {
-          antdMessage.warning("SSH connection lost");
+          antdMessage.warning(zh ? "SSH 连接已断开" : "SSH connection lost");
         }
         prevConnectedRef.current = isNowConnected;
         setConnection(newConn);
         setProfiles(profileData.profiles || []);
         setActiveProfileId(profileData.active_profile_id || "");
+        setHealth(healthData.health || null);
+        setRemoteInfo(nextRemoteInfo);
       } catch (e: any) {
         const errorMsg = e.message || String(e);
         console.error("[Remote] Failed to fetch status:", e);
         if (prevConnectedRef.current) {
-          antdMessage.warning("SSH connection lost");
+          antdMessage.warning(zh ? "SSH 连接已断开" : "SSH connection lost");
         }
         prevConnectedRef.current = false;
         setError(errorMsg);
         setConnection(null);
+        setHealth(null);
+        setRemoteInfo(null);
       } finally {
         setLoading(false);
       }
@@ -1162,17 +1433,34 @@ function buildPlugin() {
         await apiFetch(`/remote/connections/${sessionId}`, {
           method: "DELETE",
         });
-        antdMessage.success("Disconnected");
+        antdMessage.success(zh ? "已断开连接" : "Disconnected");
         fetchStatus();
       } catch (e: any) {
-        antdMessage.error(`Disconnect failed: ${e.message}`);
+        antdMessage.error(zh ? `断开连接失败: ${e.message}` : `Disconnect failed: ${e.message}`);
+      }
+    };
+
+    const handleReconnect = async () => {
+      const sessionId = getSessionId();
+      if (!sessionId) return;
+      setReconnecting(true);
+      try {
+        await apiFetch(`/remote/connections/${sessionId}/reconnect`, {
+          method: "POST",
+        });
+        antdMessage.success(zh ? "已重连" : "Reconnected");
+        fetchStatus();
+      } catch (e: any) {
+        antdMessage.error(zh ? `重连失败: ${e.message}` : `Reconnect failed: ${e.message}`);
+      } finally {
+        setReconnecting(false);
       }
     };
 
     const handleProfileClick = async (profile: any) => {
       const sessionId = getSessionId();
       if (!sessionId) {
-        antdMessage.error("No active session. Open a chat first.");
+        antdMessage.error(zh ? "无活跃会话，请先打开一个对话。" : "No active session. Open a chat first.");
         return;
       }
 
@@ -1183,18 +1471,32 @@ function buildPlugin() {
           await apiFetch(`/remote/connections/${sessionId}`, {
             method: "DELETE",
           });
-          antdMessage.success("Disconnected");
+          antdMessage.success(zh ? "已断开连接" : "Disconnected");
         } else {
-          await apiFetch(`/remote/profiles/${profile.id}/connect`, {
+          const result = await apiFetch(`/remote/profiles/${profile.id}/connect`, {
             method: "POST",
             body: JSON.stringify({ session_id: sessionId }),
           });
-          antdMessage.success(`Connected to ${profile.name}`);
+          antdMessage.success(zh ? `已连接到 ${profile.name}` : `Connected to ${profile.name}`);
+
+          if (result.sudo_needs_password) {
+            const sudoPwd = prompt(
+              zh ? "SSH 使用密钥认证，需要输入 sudo 密码：" : "SSH uses key auth. Enter sudo password:"
+            );
+            if (sudoPwd) {
+              await apiFetch(`/remote/connections/${sessionId}/sudo`, {
+                method: "POST",
+                body: JSON.stringify({ password: sudoPwd, enabled: true }),
+              });
+            }
+          }
         }
         fetchStatus();
       } catch (e: any) {
         antdMessage.error(
-          `${isActive ? "Disconnect" : "Connection"} failed: ${e.message}`,
+          zh
+            ? `${isActive ? "断开" : "连接"}失败: ${e.message}`
+            : `${isActive ? "Disconnect" : "Connection"} failed: ${e.message}`,
         );
       } finally {
         setConnectingId(null);
@@ -1209,6 +1511,11 @@ function buildPlugin() {
       else if (uptime < 3600) uptimeStr = `${(uptime / 60).toFixed(0)}m`;
       else uptimeStr = `${(uptime / 3600).toFixed(1)}h`;
     }
+    const deviceOs = remoteInfo?.remote_os || connection?.remote_os || "";
+    const deviceArch = remoteInfo?.remote_arch || connection?.remote_arch || "";
+    const deviceShell = remoteInfo?.remote_shell || connection?.remote_shell || "";
+    const deviceSummary = [deviceOs, deviceArch, deviceShell].filter(Boolean).join(" · ");
+    const shortDeviceLabel = [deviceOs, deviceArch].filter(Boolean).join(" ");
 
     const trigger = React.createElement(
       "button",
@@ -1257,6 +1564,21 @@ function buildPlugin() {
             ? "SSH Checking"
             : "SSH Offline",
       ),
+      isConnected && shortDeviceLabel
+        ? React.createElement(
+            Tag,
+            {
+              color: "green",
+              style: {
+                marginInlineStart: 0,
+                maxWidth: 92,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              },
+            },
+            shortDeviceLabel,
+          )
+        : null,
     );
 
     const content = React.createElement(
@@ -1273,7 +1595,10 @@ function buildPlugin() {
                 Space,
                 { align: "center" },
                 React.createElement(LaptopOutlined || CloudOutlined || "span"),
-                React.createElement(Text, { strong: true }, "SSH Connected"),
+                React.createElement(Text, { strong: true }, zh ? "SSH 已连接" : "SSH Connected"),
+                health?.latency_ms != null
+                  ? React.createElement(Tag, { color: "blue", style: { marginLeft: 4 } }, `${health.latency_ms.toFixed(0)} ms`)
+                  : null,
               ),
               React.createElement(
                 Text,
@@ -1286,16 +1611,34 @@ function buildPlugin() {
                 React.createElement(ThunderboltOutlined || "span"),
                 React.createElement(Text, { type: "secondary" }, uptimeStr),
               ),
+              deviceSummary
+                ? React.createElement(
+                    "div",
+                    { style: { fontSize: 12, color: "var(--ant-color-text-secondary, #888)" } },
+                    deviceSummary,
+                  )
+                : null,
             )
           : React.createElement(
-              Text,
-              { type: error ? "danger" : "secondary", style: { fontSize: 12 } },
-              error || "No active SSH connection for this chat.",
+              Space,
+              { direction: "vertical", size: 6, style: { width: "100%" } },
+              React.createElement(
+                Text,
+                { type: error ? "danger" : "secondary", style: { fontSize: 12 } },
+                error || (zh ? "当前会话无活跃 SSH 连接。" : "No active SSH connection for this chat."),
+              ),
+              health?.reconnect_available
+                ? React.createElement(
+                    Button,
+                    { type: "primary", size: "small", loading: reconnecting, onClick: handleReconnect },
+                    zh ? "重新连接" : "Reconnect",
+                  )
+                : null,
             ),
         React.createElement(
           "div",
           { style: { borderTop: `1px solid ${theme.border}`, paddingTop: 8 } },
-          React.createElement(Text, { strong: true }, "Saved Devices"),
+          React.createElement(Text, { strong: true }, zh ? "已保存设备" : "Saved Devices"),
         ),
         profiles.length === 0
           ? React.createElement(
@@ -1965,6 +2308,9 @@ function buildPlugin() {
     remote_exec: RemoteExecRender,
     remote_reconnect: RemoteReconnectRender,
     remote_info: RemoteInfoRender,
+    remote_health: RemoteHealthRender,
+    remote_set_cwd: RemoteSetCwdRender,
+    remote_sudo: RemoteSudoRender,
   });
 
   const remoteRoute = {

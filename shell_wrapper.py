@@ -18,6 +18,7 @@ async def _execute_remote(
     command: str,
     timeout: float = 60.0,
     cwd: str = "",
+    sudo: bool = False,
 ) -> ToolResponse:
     """Execute a command on the remote host via SSHManager.
 
@@ -43,6 +44,7 @@ async def _execute_remote(
             command,
             timeout,
             cwd or None,
+            sudo=sudo,
         )
     except Exception as e:
         return ToolResponse(
@@ -56,6 +58,8 @@ async def _execute_remote(
 
     # Format output matching local execute_shell_command (shell.py:499-521)
     prefix = f"[remote: {conn.username}@{conn.host}]"
+    if sudo:
+        prefix = f"{prefix} [sudo]"
 
     if returncode == 0:
         if stdout_str:

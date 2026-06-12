@@ -1,7 +1,7 @@
 {
   "id": "remote",
   "name": "Remote SSH",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "general",
   "description": "SSH into remote devices and execute shell commands transparently on remote machines.",
   "author": "AlpacaKnight",
@@ -55,6 +55,24 @@
         "name": "remote_info",
         "description": "Show detailed information about the remote machine: OS, architecture, kernel, shell, CPU, memory, disk, and available development tools.",
         "icon": "InfoCircleOutlined",
+        "config_fields": []
+      },
+      {
+        "name": "remote_health",
+        "description": "Check the health status of the current remote SSH connection: status, latency, failures, reconnect availability.",
+        "icon": "HeartOutlined",
+        "config_fields": []
+      },
+      {
+        "name": "remote_set_cwd",
+        "description": "Set the default remote working directory for this session. All subsequent commands will execute in this directory.",
+        "icon": "FolderOutlined",
+        "config_fields": []
+      },
+      {
+        "name": "remote_sudo",
+        "description": "Execute a command with sudo privileges on the remote machine. Requires sudo password to be configured.",
+        "icon": "SafetyOutlined",
         "config_fields": []
       }
     ]
