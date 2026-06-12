@@ -128,3 +128,63 @@ async def remote_connect(
             ),
         ],
     )
+
+
+async def remote_reconnect() -> ToolResponse:
+    """Reconnect to the remote machine using cached connection parameters.
+
+    Use this when the previous SSH connection was lost (e.g. timeout,
+    network interruption) and you want to re-establish it without
+    re-specifying all connection details.
+
+    Returns:
+        ToolResponse with reconnection status.
+    """
+    session_id = get_remote_session_id()
+    if session_id is None:
+        return ToolResponse(
+            content=[
+                TextBlock(
+                    type="text",
+                    text="Error: No active session. Cannot reconnect.",
+                ),
+            ],
+        )
+
+    manager = get_ssh_manager()
+
+    try:
+        info = await manager.auto_reconnect(session_id)
+    except (ConnectionError, ValueError) as e:
+        return ToolResponse(
+            content=[
+                TextBlock(
+                    type="text",
+                    text=f"Reconnection failed: {e}\n"
+                    "Use remote_connect to establish a new connection.",
+                ),
+            ],
+        )
+
+    via = ""
+    if info.get("via_jump_host"):
+        jump_label = info.get("jump_host_name") or (
+            f"{info.get('jump_username')}@"
+            f"{info.get('jump_host')}:{info.get('jump_port')}"
+        )
+        via = f"Via jump host: {jump_label}\n"
+
+    return ToolResponse(
+        content=[
+            TextBlock(
+                type="text",
+                text=(
+                    f"Reconnected to {info['username']}@{info['host']}:{info['port']}\n"
+                    f"{via}"
+                    f"Remote working directory: {info['default_cwd']}\n"
+                    f"All subsequent shell commands in this conversation "
+                    f"will execute on this remote machine."
+                ),
+            ),
+        ],
+    )

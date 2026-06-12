@@ -1,6 +1,7 @@
 """SSH-aware shell execution and toolkit middleware factory."""
 
 import logging
+import shlex
 from typing import AsyncGenerator
 
 from agentscope.message import TextBlock
@@ -130,8 +131,16 @@ def make_ssh_middleware():
             except (ValueError, TypeError):
                 timeout = 60.0
 
+        # Adapt cd wrapper for fish shell
+        effective_cwd = cwd or conn.default_cwd
+        if effective_cwd and effective_cwd != "/":
+            quoted_cwd = shlex.quote(effective_cwd)
+            is_fish = "fish" in (conn.remote_shell or "")
+            separator = "; and " if is_fish else " && "
+            command = f"cd {quoted_cwd}{separator}{command}"
+
         # Execute on remote and yield the result
-        result = await _execute_remote(session_id, command, timeout, cwd)
+        result = await _execute_remote(session_id, command, timeout, "")
         yield result
 
     return ssh_middleware

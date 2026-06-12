@@ -28,6 +28,12 @@
         "config_fields": []
       },
       {
+        "name": "remote_reconnect",
+        "description": "Reconnect to the remote machine using cached connection parameters. Use when the previous SSH connection was lost.",
+        "icon": "ReloadOutlined",
+        "config_fields": []
+      },
+      {
         "name": "remote_disconnect",
         "description": "Disconnect from the current remote SSH session.",
         "icon": "DisconnectOutlined",
@@ -43,6 +49,12 @@
         "name": "remote_exec",
         "description": "Explicitly execute a command on the remote machine via SSH.",
         "icon": "CodeOutlined",
+        "config_fields": []
+      },
+      {
+        "name": "remote_info",
+        "description": "Show detailed information about the remote machine: OS, architecture, kernel, shell, CPU, memory, disk, and available development tools.",
+        "icon": "InfoCircleOutlined",
         "config_fields": []
       }
     ]

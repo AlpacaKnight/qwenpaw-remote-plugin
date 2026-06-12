@@ -25,10 +25,11 @@ class RemotePlugin:
         self._api = api
 
         # Register tools via api.register_tool (deferred to startup hook)
-        from .tools.remote_connect import remote_connect
+        from .tools.remote_connect import remote_connect, remote_reconnect
         from .tools.remote_disconnect import remote_disconnect
         from .tools.remote_list import remote_list
         from .tools.remote_exec import remote_exec
+        from .tools.remote_info import remote_info
         from .tools.remote_command import RemoteCommandHandler
 
         api.register_tool(
@@ -40,6 +41,16 @@ class RemotePlugin:
                 "on the remote machine."
             ),
             icon="LinkOutlined",
+            enabled=False,
+        )
+        api.register_tool(
+            tool_name="remote_reconnect",
+            tool_func=remote_reconnect,
+            description=(
+                "Reconnect to the remote machine using cached connection "
+                "parameters. Use when the previous SSH connection was lost."
+            ),
+            icon="ReloadOutlined",
             enabled=False,
         )
         api.register_tool(
@@ -63,6 +74,17 @@ class RemotePlugin:
                 "Explicitly execute a command on the remote machine via SSH."
             ),
             icon="CodeOutlined",
+            enabled=False,
+        )
+        api.register_tool(
+            tool_name="remote_info",
+            tool_func=remote_info,
+            description=(
+                "Show detailed information about the remote machine: "
+                "OS, architecture, kernel, shell, CPU, memory, disk, "
+                "and available development tools."
+            ),
+            icon="InfoCircleOutlined",
             enabled=False,
         )
         api.register_control_command(

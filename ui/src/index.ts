@@ -55,6 +55,7 @@ function buildPlugin() {
     LoadingOutlined,
     LaptopOutlined,
     ThunderboltOutlined,
+    InfoCircleOutlined,
   } = antdIcons || {};
 
   // ── Helpers ──────────────────────────────────────────────────────────
@@ -295,6 +296,81 @@ function buildPlugin() {
               borderRadius: 4,
               fontSize: 12,
               maxHeight: 300,
+              overflow: "auto",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all",
+            },
+          },
+          output,
+        ),
+      ),
+    );
+  }
+
+  function RemoteReconnectRender({ data }: { data: any }) {
+    const output = parseToolOutput(data);
+    const isSuccess = output.includes("Reconnected to");
+    const isFailure = output.includes("failed") || output.includes("Error");
+
+    return React.createElement(
+      Card,
+      {
+        size: "small",
+        style: {
+          marginTop: 8,
+          borderLeft: `3px solid ${isSuccess ? "#52c41a" : isFailure ? "#ff4d4f" : "#faad14"}`,
+        },
+      },
+      React.createElement(
+        Space,
+        { direction: "vertical", style: { width: "100%" } },
+        React.createElement(
+          Space,
+          null,
+          React.createElement(ReloadOutlined || "\u{21BB}"),
+          React.createElement(Text, { strong: true }, "Remote SSH Reconnect"),
+        ),
+        React.createElement(
+          Text,
+          { type: isFailure ? "danger" : "success", style: { whiteSpace: "pre-wrap" } },
+          output,
+        ),
+      ),
+    );
+  }
+
+  function RemoteInfoRender({ data }: { data: any }) {
+    const output = parseToolOutput(data);
+    const hasInfo = output.includes("Remote Environment");
+
+    return React.createElement(
+      Card,
+      {
+        size: "small",
+        style: {
+          marginTop: 8,
+          borderLeft: "3px solid #1677ff",
+        },
+      },
+      React.createElement(
+        Space,
+        { direction: "vertical", style: { width: "100%" } },
+        React.createElement(
+          Space,
+          null,
+          React.createElement(InfoCircleOutlined || CloudOutlined || "\u{2139}"),
+          React.createElement(Text, { strong: true }, "Remote Machine Info"),
+        ),
+        React.createElement(
+          "pre",
+          {
+            style: {
+              margin: 0,
+              padding: "8px 12px",
+              background: "#f5f5f5",
+              borderRadius: 4,
+              fontSize: 12,
+              maxHeight: 400,
               overflow: "auto",
               whiteSpace: "pre-wrap",
               wordBreak: "break-all",
@@ -1036,6 +1112,7 @@ function buildPlugin() {
     const [connectingId, setConnectingId] = useState(null as string | null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const prevConnectedRef = React.useRef(false);
 
     const fetchStatus = useCallback(async () => {
       try {
@@ -1048,12 +1125,23 @@ function buildPlugin() {
           apiFetch(`/remote/profiles?session_id=${encodedSessionId}`),
         ]);
         const conns = connectionData.connections || [];
-        setConnection(conns.length > 0 ? conns[0] : null);
+        const newConn = conns.length > 0 ? conns[0] : null;
+        const wasConnected = prevConnectedRef.current;
+        const isNowConnected = newConn !== null;
+        if (wasConnected && !isNowConnected) {
+          antdMessage.warning("SSH connection lost");
+        }
+        prevConnectedRef.current = isNowConnected;
+        setConnection(newConn);
         setProfiles(profileData.profiles || []);
         setActiveProfileId(profileData.active_profile_id || "");
       } catch (e: any) {
         const errorMsg = e.message || String(e);
         console.error("[Remote] Failed to fetch status:", e);
+        if (prevConnectedRef.current) {
+          antdMessage.warning("SSH connection lost");
+        }
+        prevConnectedRef.current = false;
         setError(errorMsg);
         setConnection(null);
       } finally {
@@ -1875,6 +1963,8 @@ function buildPlugin() {
     remote_disconnect: RemoteDisconnectRender,
     remote_list: RemoteListRender,
     remote_exec: RemoteExecRender,
+    remote_reconnect: RemoteReconnectRender,
+    remote_info: RemoteInfoRender,
   });
 
   const remoteRoute = {

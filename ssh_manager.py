@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import shlex
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -42,6 +43,12 @@ class SSHConnectionInfo:
     last_used: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     default_cwd: str = "/"
     profile_id: str = ""
+    _connect_params: dict = field(default_factory=dict, repr=False)
+    _healthy: bool = True
+    remote_os: str = ""
+    remote_arch: str = ""
+    remote_kernel: str = ""
+    remote_shell: str = ""
 
     def to_dict(self) -> dict:
         """Return sanitized connection info (no credentials)."""
@@ -62,6 +69,10 @@ class SSHConnectionInfo:
             "uptime_seconds": (
                 datetime.now(timezone.utc) - self.connected_at
             ).total_seconds(),
+            "remote_os": self.remote_os,
+            "remote_arch": self.remote_arch,
+            "remote_kernel": self.remote_kernel,
+            "remote_shell": self.remote_shell,
         }
 
 
@@ -74,7 +85,9 @@ class SSHManager:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._connections: dict[str, SSHConnectionInfo] = {}
+            cls._instance._reconnect_params: dict[str, dict] = {}
             cls._instance._lock = asyncio.Lock()
+            cls._instance._heartbeat_task: asyncio.Task | None = None
         return cls._instance
 
     async def connect(
@@ -261,10 +274,30 @@ class SSHManager:
             jump_port=jump_config.get("port", 22) if jump_config else 22,
             jump_username=jump_config.get("username", "") if jump_config else "",
             profile_id=profile_id,
+            _connect_params={
+                "host": host,
+                "port": port,
+                "username": username,
+                "password": password,
+                "key_path": key_path,
+                "passphrase": passphrase,
+                "profile_id": profile_id,
+                "jump_host_id": jump_config.get("id", "") if jump_config else "",
+                "jump_name": jump_config.get("name", "") if jump_config else "",
+                "jump_host": jump_config.get("host", "") if jump_config else "",
+                "jump_port": jump_config.get("port", 22) if jump_config else 22,
+                "jump_username": jump_config.get("username", "") if jump_config else "",
+                "jump_password": jump_config.get("password", "") if jump_config else "",
+                "jump_key_path": jump_config.get("key_path", "") if jump_config else "",
+                "jump_passphrase": jump_config.get("passphrase", "") if jump_config else "",
+            },
         )
 
         async with self._lock:
             self._connections[session_id] = info
+            self._reconnect_params[session_id] = dict(info._connect_params)
+            if self._heartbeat_task is None:
+                self._start_heartbeat()
 
         logger.info(
             "[Remote] Connected: %s@%s:%d (session=%s)",
@@ -273,6 +306,10 @@ class SSHManager:
             port,
             session_id,
         )
+
+        # Auto-detect remote environment in background
+        asyncio.create_task(self._safe_detect_env(session_id))
+
         return info.to_dict()
 
     @staticmethod
@@ -326,6 +363,7 @@ class SSHManager:
         """Disconnect the SSH session. Returns True if disconnected."""
         async with self._lock:
             info = self._connections.pop(session_id, None)
+            self._reconnect_params.pop(session_id, None)
 
         if info is None:
             return False
@@ -359,6 +397,7 @@ class SSHManager:
             ]
             for sid, _info in matches:
                 self._connections.pop(sid, None)
+                self._reconnect_params.pop(sid, None)
 
         for sid, info in matches:
             try:
@@ -391,6 +430,7 @@ class SSHManager:
             ]
             for sid, _info in matches:
                 self._connections.pop(sid, None)
+                self._reconnect_params.pop(sid, None)
 
         for sid, info in matches:
             try:
@@ -463,7 +503,10 @@ class SSHManager:
         # Wrap command with cd if cwd is specified
         effective_cwd = cwd or info.default_cwd
         if effective_cwd and effective_cwd != "/":
-            cmd = f"cd {effective_cwd} && {command}"
+            quoted_cwd = shlex.quote(effective_cwd)
+            is_fish = "fish" in (info.remote_shell or "")
+            separator = "; and " if is_fish else " && "
+            cmd = f"cd {quoted_cwd}{separator}{command}"
         else:
             cmd = command
 
@@ -527,6 +570,7 @@ class SSHManager:
 
     async def close_all(self) -> None:
         """Close all SSH connections (called on shutdown)."""
+        self._stop_heartbeat()
         async with self._lock:
             for sid, info in self._connections.items():
                 try:
@@ -546,6 +590,7 @@ class SSHManager:
                     sid,
                 )
             self._connections.clear()
+            self._reconnect_params.clear()
 
     def list_connections(self) -> list[dict]:
         """Return sanitized info for all active connections."""
@@ -555,6 +600,160 @@ class SSHManager:
             d["session_id"] = sid
             result.append(d)
         return result
+
+    # ── Heartbeat ────────────────────────────────────────────────────
+
+    def _start_heartbeat(self, interval: float = 15.0) -> None:
+        """Start a background heartbeat task to detect stale connections."""
+        if self._heartbeat_task is not None:
+            return
+
+        async def _heartbeat_loop():
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    await self._check_all_connections()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.warning("[Remote] Heartbeat check failed: %s", e)
+
+                async with self._lock:
+                    if not self._connections:
+                        self._heartbeat_task = None
+                        logger.debug("[Remote] Heartbeat stopped (no connections)")
+                        return
+
+        self._heartbeat_task = asyncio.create_task(_heartbeat_loop())
+        logger.debug("[Remote] Heartbeat started (interval=%.1fs)", interval)
+
+    def _stop_heartbeat(self) -> None:
+        """Stop the heartbeat task."""
+        if self._heartbeat_task is not None:
+            self._heartbeat_task.cancel()
+            self._heartbeat_task = None
+            logger.debug("[Remote] Heartbeat stopped")
+
+    async def _check_all_connections(self) -> None:
+        """Check health of all active connections."""
+        async with self._lock:
+            session_ids = list(self._connections.keys())
+
+        stale: list[str] = []
+        for sid in session_ids:
+            info = self._connections.get(sid)
+            if info is None:
+                continue
+            transport = info.client.get_transport()
+            if transport is None or not transport.is_active():
+                stale.append(sid)
+                continue
+            try:
+                await asyncio.to_thread(transport.send_ignore)
+            except Exception:
+                stale.append(sid)
+
+        if stale:
+            async with self._lock:
+                for sid in stale:
+                    info = self._connections.pop(sid, None)
+                    if info is not None:
+                        info._healthy = False
+                        try:
+                            info.client.close()
+                        except Exception:
+                            pass
+                        if info.jump_client is not None:
+                            try:
+                                info.jump_client.close()
+                            except Exception:
+                                pass
+                        logger.warning(
+                            "[Remote] Heartbeat: stale connection removed "
+                            "%s@%s:%d (session=%s)",
+                            info.username,
+                            info.host,
+                            info.port,
+                            sid,
+                        )
+
+    # ── Auto Reconnect ──────────────────────────────────────────────
+
+    async def auto_reconnect(self, session_id: str) -> dict:
+        """Reconnect using cached connection parameters.
+
+        Returns connection info dict on success.
+        Raises on failure.
+        """
+        info = self._connections.get(session_id)
+        params = dict(
+            info._connect_params if info is not None
+            else self._reconnect_params.get(session_id, {})
+        )
+        if not params:
+            raise ConnectionError(
+                "No cached connection parameters. Use remote_connect instead."
+            )
+
+        # Close stale connection if present
+        if info is not None:
+            try:
+                info.client.close()
+            except Exception:
+                pass
+            if info.jump_client is not None:
+                try:
+                    info.jump_client.close()
+                except Exception:
+                    pass
+            self._connections.pop(session_id, None)
+
+        return await self.connect(session_id=session_id, **params)
+
+    # ── Remote Environment Detection ────────────────────────────────
+
+    async def detect_remote_env(self, session_id: str) -> dict:
+        """Detect remote OS, arch, kernel, shell and cache on connection info.
+
+        Returns dict with remote_os, remote_arch, remote_kernel, remote_shell.
+        """
+        info = self.get_connection(session_id)
+        if info is None:
+            return {}
+
+        try:
+            _, os_name, _ = await self.execute_command(
+                session_id, "uname -s", timeout=5
+            )
+            _, arch, _ = await self.execute_command(
+                session_id, "uname -m", timeout=5
+            )
+            _, kernel, _ = await self.execute_command(
+                session_id, "uname -r", timeout=5
+            )
+            _, shell, _ = await self.execute_command(
+                session_id, "echo $SHELL", timeout=5
+            )
+            info.remote_os = os_name.strip()
+            info.remote_arch = arch.strip()
+            info.remote_kernel = kernel.strip()
+            info.remote_shell = shell.strip()
+        except Exception as e:
+            logger.debug("[Remote] Environment detection failed: %s", e)
+
+        return {
+            "remote_os": info.remote_os,
+            "remote_arch": info.remote_arch,
+            "remote_kernel": info.remote_kernel,
+            "remote_shell": info.remote_shell,
+        }
+
+    async def _safe_detect_env(self, session_id: str) -> None:
+        """Detect remote env, swallowing errors."""
+        try:
+            await self.detect_remote_env(session_id)
+        except Exception as e:
+            logger.debug("[Remote] Background env detection failed: %s", e)
 
 
 def get_ssh_manager() -> SSHManager:

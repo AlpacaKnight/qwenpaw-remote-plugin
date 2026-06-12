@@ -61,6 +61,15 @@ async def remote_list() -> ToolResponse:
         )
         via = f"  Via jump host: {jump_label}\n"
 
+    env_lines = ""
+    if info.get("remote_os"):
+        env_lines = (
+            f"  OS: {info['remote_os']}\n"
+            f"  Arch: {info['remote_arch']}\n"
+            f"  Kernel: {info['remote_kernel']}\n"
+            f"  Shell: {info['remote_shell']}\n"
+        )
+
     return ToolResponse(
         content=[
             TextBlock(
@@ -71,7 +80,8 @@ async def remote_list() -> ToolResponse:
                     f"{via}"
                     f"  Connected at: {info['connected_at']}\n"
                     f"  Uptime: {uptime_str}\n"
-                    f"  Remote working directory: {info['default_cwd']}"
+                    f"  Remote working directory: {info['default_cwd']}\n"
+                    f"{env_lines}"
                 ),
             ),
         ],
