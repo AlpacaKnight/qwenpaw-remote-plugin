@@ -1157,7 +1157,15 @@ function buildPlugin() {
           ),
           React.createElement(
             Form.Item,
-            { name: "password", label: zh ? "密码" : "Password" },
+            {
+              name: "password",
+              label: React.createElement(Space, null,
+                zh ? "密码" : "Password",
+                editingProfile?.has_password
+                  ? React.createElement(Tag, { color: "green", style: { marginLeft: 4 } }, zh ? "已设置" : "Set")
+                  : null,
+              ),
+            },
             React.createElement(Input.Password, {
               placeholder: editingProfile
                 ? (zh ? "留空则保留已保存的密码" : "Leave empty to keep the saved password")
@@ -1168,12 +1176,22 @@ function buildPlugin() {
             Form.Item,
             { name: "key_path", label: zh ? "SSH 密钥路径" : "SSH Key Path" },
             React.createElement(Input, {
-              placeholder: zh ? "/home/user/.ssh/id_rsa（可选）" : "/home/user/.ssh/id_rsa (optional)",
+              placeholder: editingProfile?.has_passphrase
+                ? (zh ? "留空则保留已保存的密钥口令" : "Leave empty to keep saved passphrase")
+                : (zh ? "/home/user/.ssh/id_rsa（可选）" : "/home/user/.ssh/id_rsa (optional)"),
             }),
           ),
           React.createElement(
             Form.Item,
-            { name: "passphrase", label: zh ? "密钥口令" : "Key Passphrase" },
+            {
+              name: "passphrase",
+              label: React.createElement(Space, null,
+                zh ? "密钥口令" : "Key Passphrase",
+                editingProfile?.has_passphrase
+                  ? React.createElement(Tag, { color: "green", style: { marginLeft: 4 } }, zh ? "已设置" : "Set")
+                  : null,
+              ),
+            },
             React.createElement(Input.Password, {
               placeholder: editingProfile
                 ? (zh ? "留空则保留已保存的密钥口令" : "Leave empty to keep the saved passphrase")
@@ -1314,7 +1332,15 @@ function buildPlugin() {
           ),
           React.createElement(
             Form.Item,
-            { name: "password", label: zh ? "密码" : "Password" },
+            {
+              name: "password",
+              label: React.createElement(Space, null,
+                zh ? "密码" : "Password",
+                editingJumpHost?.has_password
+                  ? React.createElement(Tag, { color: "green", style: { marginLeft: 4 } }, zh ? "已设置" : "Set")
+                  : null,
+              ),
+            },
             React.createElement(Input.Password, {
               placeholder: editingJumpHost
                 ? (zh ? "留空则保留已保存的密码" : "Leave empty to keep the saved password")
@@ -1325,12 +1351,22 @@ function buildPlugin() {
             Form.Item,
             { name: "key_path", label: zh ? "SSH 密钥路径" : "SSH Key Path" },
             React.createElement(Input, {
-              placeholder: zh ? "/home/user/.ssh/id_rsa（可选）" : "/home/user/.ssh/id_rsa (optional)",
+              placeholder: editingJumpHost?.has_passphrase
+                ? (zh ? "留空则保留已保存的密钥口令" : "Leave empty to keep saved passphrase")
+                : (zh ? "/home/user/.ssh/id_rsa（可选）" : "/home/user/.ssh/id_rsa (optional)"),
             }),
           ),
           React.createElement(
             Form.Item,
-            { name: "passphrase", label: zh ? "密钥口令" : "Key Passphrase" },
+            {
+              name: "passphrase",
+              label: React.createElement(Space, null,
+                zh ? "密钥口令" : "Key Passphrase",
+                editingJumpHost?.has_passphrase
+                  ? React.createElement(Tag, { color: "green", style: { marginLeft: 4 } }, zh ? "已设置" : "Set")
+                  : null,
+              ),
+            },
             React.createElement(Input.Password, {
               placeholder: editingJumpHost
                 ? (zh ? "留空则保留已保存的密钥口令" : "Leave empty to keep the saved passphrase")

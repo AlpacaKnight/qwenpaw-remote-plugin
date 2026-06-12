@@ -118,8 +118,8 @@ class CwdRequest(BaseModel):
 
 def _sanitize_secret_fields(item: dict) -> dict:
     response = dict(item)
-    response.pop("password", None)
-    response.pop("passphrase", None)
+    response["has_password"] = bool(response.pop("password", None))
+    response["has_passphrase"] = bool(response.pop("passphrase", None))
     return response
 
 
@@ -164,7 +164,7 @@ async def get_profiles(session_id: Optional[str] = None):
 
     result = []
     for profile in profiles:
-        item = dict(profile)
+        item = _sanitize_secret_fields(profile)
         item["connected"] = bool(
             active_profile_id and item.get("id") == active_profile_id
         )
@@ -172,8 +172,6 @@ async def get_profiles(session_id: Optional[str] = None):
             str(item.get("jump_host_id", "")),
             "",
         )
-        item.pop("password", None)
-        item.pop("passphrase", None)
         result.append(item)
 
     return {
