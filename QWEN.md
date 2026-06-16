@@ -15,27 +15,31 @@ Remote SSH 是一个 **QwenPaw 插件**，为聊天会话提供 SSH 远程连接
 插件通过 **monkey-patching** 机制注入 QwenPaw 核心，不修改宿主源码：
 
 ```
-plugin.py (入口)
-├── _patch_create_toolkit()  → shell_wrapper.py (SSH 中间件)
-├── _patch_reply()           → context.py (ContextVar 会话绑定)
-└── _mount_router()          → routers/connections.py (REST API)
+plugin.py (根入口 shim)
+└── remote/plugin.py (后端实现入口)
+    ├── _patch_create_toolkit()  → remote/shell_wrapper.py (SSH 中间件)
+    ├── _patch_reply()           → remote/context.py (ContextVar 会话绑定)
+    └── _mount_router()          → remote/routers/connections.py (REST API)
 
-ssh_manager.py (SSH 连接单例，按 session_id 管理)
-store.py (持久化连接配置/跳板机到 profiles.json)
-tools/ (remote_connect, remote_disconnect, remote_list, remote_exec, RemoteCommandHandler)
+remote/ssh_manager.py (SSH 连接单例，按 session_id 管理)
+remote/ssh_types.py (SSH 数据结构和通用命令包装 helper)
+remote/store.py (持久化连接配置/跳板机到 profiles.json)
+remote/tools/ (remote_connect, remote_disconnect, remote_list, remote_exec, RemoteCommandHandler)
 ```
 
 ### Core Components
 
 | File | Purpose |
 |------|---------|
-| `plugin.py` | 插件入口，注册 tools/startup/shutdown hooks，执行 monkey-patch |
-| `ssh_manager.py` | SSH 连接管理器单例，支持密码/密钥认证及跳板机，基于 paramiko |
-| `context.py` | ContextVar 用于 session_id 会话隔离 |
-| `shell_wrapper.py` | Toolkit 中间件，拦截 `execute_shell_command` 并转发到 SSH |
-| `store.py` | 连接配置/跳板机的持久化存储（JSON 文件） |
-| `routers/connections.py` | FastAPI 路由，提供 REST API 管理 SSH 连接 |
-| `tools/` | 注册到 QwenPaw 的 tool 函数 |
+| `plugin.py` | 插件系统入口 shim，导出 `remote.plugin.plugin` |
+| `remote/plugin.py` | 后端实现入口，注册 tools/startup/shutdown hooks，执行 monkey-patch |
+| `remote/ssh_manager.py` | SSH 连接管理器单例，支持密码/密钥认证及跳板机，基于 paramiko |
+| `remote/ssh_types.py` | SSH 连接数据结构、健康状态、环境快照和 cwd 命令包装 helper |
+| `remote/context.py` | ContextVar 用于 session_id 会话隔离 |
+| `remote/shell_wrapper.py` | Toolkit 中间件，拦截 `execute_shell_command` 并转发到 SSH |
+| `remote/store.py` | 连接配置/跳板机的持久化存储（JSON 文件） |
+| `remote/routers/connections.py` | FastAPI 路由，提供 REST API 管理 SSH 连接 |
+| `remote/tools/` | 注册到 QwenPaw 的 tool 函数 |
 | `ui/` | React 前端管理页面 |
 
 ### Features

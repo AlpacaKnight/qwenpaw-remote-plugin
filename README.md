@@ -137,7 +137,7 @@ chmod +x scripts/package.sh
 ./scripts/package.sh
 ```
 
-脚本会自动读取 `plugin.json` 中的版本号，生成安装包 `dist\qwenpaw-remote-plugin-<version>.zip`。ZIP 根目录必须直接包含 `plugin.json`，不要多包一层仓库目录。打包脚本会使用跨平台的 ZIP 内部路径格式，避免在不同系统安装时找不到 `tools/`、`routers/` 等模块目录。
+脚本会自动读取 `plugin.json` 中的版本号，生成安装包 `dist\qwenpaw-remote-plugin-<version>.zip`。ZIP 根目录必须直接包含 `plugin.json`，不要多包一层仓库目录。打包脚本会使用跨平台的 ZIP 内部路径格式，避免在不同系统安装时找不到 `remote/` 后端包。
 
 QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`entry.frontend` 应设置为 `ui/dist/index.js`：
 
@@ -171,12 +171,7 @@ QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`
 - `plugin.json`
 - `plugin.py`
 - `requirements.txt`
-- `context.py`
-- `ssh_manager.py`
-- `shell_wrapper.py`
-- `store.py`
-- `routers/`
-- `tools/`
+- `remote/`
 - `ui/dist/index.js`
 
 不要包含 `node_modules`、`__pycache__`、`.venv`、`.git` 或其他开发阶段生成文件。

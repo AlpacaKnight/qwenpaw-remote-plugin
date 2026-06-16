@@ -37,8 +37,8 @@ fi
 rm -rf "$DIST_ROOT"
 mkdir -p "$STAGING"
 
-cp plugin.json plugin.py requirements.txt context.py ssh_manager.py shell_wrapper.py store.py README.md LICENSE "$STAGING/"
-cp -R routers tools "$STAGING/"
+cp plugin.json plugin.py requirements.txt README.md LICENSE "$STAGING/"
+cp -R remote "$STAGING/"
 
 mkdir -p "$STAGING/ui/dist"
 cp ui/dist/* "$STAGING/ui/dist/"

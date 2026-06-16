@@ -31,8 +31,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "ui/dist/index.js") -PathT
 Remove-Item -LiteralPath $distRoot -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
-Copy-Item -LiteralPath plugin.json, plugin.py, requirements.txt, context.py, ssh_manager.py, shell_wrapper.py, store.py, README.md, LICENSE -Destination $staging
-Copy-Item -LiteralPath routers, tools -Destination $staging -Recurse
+Copy-Item -LiteralPath plugin.json, plugin.py, requirements.txt, README.md, LICENSE -Destination $staging
+Copy-Item -LiteralPath remote -Destination $staging -Recurse
 
 New-Item -ItemType Directory -Force -Path (Join-Path $staging "ui\dist") | Out-Null
 Copy-Item -Path "ui\dist\*" -Destination (Join-Path $staging "ui\dist")
