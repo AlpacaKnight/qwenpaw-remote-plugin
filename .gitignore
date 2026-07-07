@@ -14,3 +14,7 @@ ui/dist/
 Thumbs.db
 
 *.zip
+
+
+# Code Agents
+.mimocode/
