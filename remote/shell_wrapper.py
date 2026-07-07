@@ -1,14 +1,20 @@
-"""SSH-aware shell execution and toolkit middleware factory."""
+"""SSH-aware shell execution and middleware factory.
+
+Supports both QwenPaw 1.x (function-based middleware + ContextVar) and
+QwenPaw 2.0+ (MiddlewareBase + api.register_middleware).
+"""
 
 import logging
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 
 from agentscope.message import TextBlock
 from agentscope.tool import ToolResponse
 
-from .context import get_remote_session_id
 from .ssh_manager import get_ssh_manager
 from .ssh_types import wrap_command_with_cwd
+
+if TYPE_CHECKING:
+    from agentscope.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -88,13 +94,17 @@ async def _execute_remote(
     )
 
 
+# ---------------------------------------------------------------------------
+# QwenPaw 1.x compatibility: function-based middleware + ContextVar
+# ---------------------------------------------------------------------------
+
 def make_ssh_middleware():
-    """Create a toolkit middleware that intercepts execute_shell_command
-    and redirects it to SSH when a remote connection is active.
+    """Create SSH middleware for QwenPaw 1.x (function-based).
 
     Returns an async generator function compatible with
     Toolkit.register_middleware().
     """
+    from .context import get_remote_session_id
 
     async def ssh_middleware(
         kwargs: dict,
@@ -144,3 +154,84 @@ def make_ssh_middleware():
         yield result
 
     return ssh_middleware
+
+
+# ---------------------------------------------------------------------------
+# QwenPaw 2.0+: MiddlewareBase class
+# ---------------------------------------------------------------------------
+
+def make_ssh_middleware_factory():
+    """Create a middleware factory for QwenPaw 2.0+.
+
+    Returns a factory function compatible with api.register_middleware().
+    The factory is called once per request during agent assembly:
+        factory(ctx, agent_config) -> MiddlewareBase | None
+    """
+    try:
+        from agentscope.middleware import MiddlewareBase
+    except ImportError:
+        return None
+
+    class SSHMiddleware(MiddlewareBase):
+        """Middleware that intercepts execute_shell_command and redirects to SSH."""
+
+        async def on_acting(
+            self,
+            agent: "Agent",
+            input_kwargs: dict[str, Any],
+            next_handler: Callable[..., AsyncGenerator[Any, None]],
+        ) -> AsyncGenerator[Any, None]:
+            tool_call = input_kwargs.get("tool_call")
+            if tool_call is None:
+                async for chunk in next_handler():
+                    yield chunk
+                return
+
+            # Only intercept execute_shell_command
+            tool_name = getattr(tool_call, "name", None)
+            if tool_name != "execute_shell_command":
+                async for chunk in next_handler():
+                    yield chunk
+                return
+
+            # Get session_id from agent's request_context (QwenPaw 2.0)
+            request_context = getattr(agent, "_request_context", None) or {}
+            session_id = request_context.get("session_id", "")
+
+            if not session_id:
+                async for chunk in next_handler():
+                    yield chunk
+                return
+
+            manager = get_ssh_manager()
+            conn = manager.get_connection(session_id)
+            if conn is None:
+                # No active connection — fall back to local execution
+                async for chunk in next_handler():
+                    yield chunk
+                return
+
+            # Extract command and timeout from tool_call input
+            tool_input = getattr(tool_call, "input", None) or {}
+            command = tool_input.get("command", "")
+            timeout = tool_input.get("timeout", 60.0)
+            cwd = tool_input.get("cwd", "")
+
+            if isinstance(timeout, str):
+                try:
+                    timeout = float(timeout)
+                except (ValueError, TypeError):
+                    timeout = 60.0
+
+            # Adapt cd wrapper for fish shell
+            effective_cwd = cwd or conn.default_cwd
+            command = wrap_command_with_cwd(command, effective_cwd, conn.remote_shell)
+
+            # Execute on remote and yield the result
+            result = await _execute_remote(session_id, command, timeout, "")
+            yield result
+
+    def factory(ctx: Any, agent_config: Any):
+        return SSHMiddleware()
+
+    return factory
