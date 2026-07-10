@@ -4,6 +4,7 @@ Supports both QwenPaw 1.x (function-based middleware + ContextVar) and
 QwenPaw 2.0+ (MiddlewareBase + api.register_middleware).
 """
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 
@@ -134,7 +135,16 @@ def make_ssh_middleware():
             return
 
         # Extract command and timeout from tool_call input
-        tool_input = tool_call.get("input", {})
+        raw_input = tool_call.get("input", {})
+        if isinstance(raw_input, str):
+            try:
+                tool_input = json.loads(raw_input)
+            except (json.JSONDecodeError, TypeError):
+                tool_input = {}
+        elif isinstance(raw_input, dict):
+            tool_input = raw_input
+        else:
+            tool_input = {}
         command = tool_input.get("command", "")
         timeout = tool_input.get("timeout", 60.0)
         cwd = tool_input.get("cwd", "")
@@ -145,12 +155,9 @@ def make_ssh_middleware():
             except (ValueError, TypeError):
                 timeout = 60.0
 
-        # Adapt cd wrapper for fish shell
-        effective_cwd = cwd or conn.default_cwd
-        command = wrap_command_with_cwd(command, effective_cwd, conn.remote_shell)
-
-        # Execute on remote and yield the result
-        result = await _execute_remote(session_id, command, timeout, "")
+        # Execute on remote — cwd is passed to execute_command which
+        # handles wrap_command_with_cwd internally
+        result = await _execute_remote(session_id, command, timeout, cwd)
         yield result
 
     return ssh_middleware
@@ -183,14 +190,39 @@ def make_ssh_middleware_factory():
         ) -> AsyncGenerator[Any, None]:
             tool_call = input_kwargs.get("tool_call")
             if tool_call is None:
-                async for chunk in next_handler():
+                async for chunk in next_handler(**input_kwargs):
                     yield chunk
                 return
 
             # Only intercept execute_shell_command
-            tool_name = getattr(tool_call, "name", None)
+            # tool_call may be a dict (agentscope) or an object with attributes
+            if isinstance(tool_call, dict):
+                tool_name = tool_call.get("name")
+                raw_input = tool_call.get("input")
+                if isinstance(raw_input, str):
+                    try:
+                        tool_input = json.loads(raw_input)
+                    except (json.JSONDecodeError, TypeError):
+                        tool_input = {}
+                elif isinstance(raw_input, dict):
+                    tool_input = raw_input
+                else:
+                    tool_input = {}
+            else:
+                tool_name = getattr(tool_call, "name", None)
+                raw_input = getattr(tool_call, "input", None)
+                if isinstance(raw_input, str):
+                    try:
+                        tool_input = json.loads(raw_input)
+                    except (json.JSONDecodeError, TypeError):
+                        tool_input = {}
+                elif isinstance(raw_input, dict):
+                    tool_input = raw_input
+                else:
+                    tool_input = {}
+
             if tool_name != "execute_shell_command":
-                async for chunk in next_handler():
+                async for chunk in next_handler(**input_kwargs):
                     yield chunk
                 return
 
@@ -199,7 +231,7 @@ def make_ssh_middleware_factory():
             session_id = request_context.get("session_id", "")
 
             if not session_id:
-                async for chunk in next_handler():
+                async for chunk in next_handler(**input_kwargs):
                     yield chunk
                 return
 
@@ -207,12 +239,11 @@ def make_ssh_middleware_factory():
             conn = manager.get_connection(session_id)
             if conn is None:
                 # No active connection — fall back to local execution
-                async for chunk in next_handler():
+                async for chunk in next_handler(**input_kwargs):
                     yield chunk
                 return
 
             # Extract command and timeout from tool_call input
-            tool_input = getattr(tool_call, "input", None) or {}
             command = tool_input.get("command", "")
             timeout = tool_input.get("timeout", 60.0)
             cwd = tool_input.get("cwd", "")
@@ -223,12 +254,9 @@ def make_ssh_middleware_factory():
                 except (ValueError, TypeError):
                     timeout = 60.0
 
-            # Adapt cd wrapper for fish shell
-            effective_cwd = cwd or conn.default_cwd
-            command = wrap_command_with_cwd(command, effective_cwd, conn.remote_shell)
-
-            # Execute on remote and yield the result
-            result = await _execute_remote(session_id, command, timeout, "")
+            # Execute on remote — cwd is passed to execute_command which
+            # handles wrap_command_with_cwd internally
+            result = await _execute_remote(session_id, command, timeout, cwd)
             yield result
 
     def factory(ctx: Any, agent_config: Any):

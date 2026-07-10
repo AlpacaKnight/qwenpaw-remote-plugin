@@ -1469,7 +1469,6 @@ function buildPlugin() {
         await apiFetch(`/remote/connections/${sessionId}`, {
           method: "DELETE",
         });
-        antdMessage.success(zh ? "已断开连接" : "Disconnected");
         fetchStatus();
       } catch (e: any) {
         antdMessage.error(zh ? `断开连接失败: ${e.message}` : `Disconnect failed: ${e.message}`);
@@ -1507,7 +1506,6 @@ function buildPlugin() {
           await apiFetch(`/remote/connections/${sessionId}`, {
             method: "DELETE",
           });
-          antdMessage.success(zh ? "已断开连接" : "Disconnected");
         } else {
           const result = await apiFetch(`/remote/profiles/${profile.id}/connect`, {
             method: "POST",
