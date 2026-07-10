@@ -1,5 +1,10 @@
 # GitHub Actions CI 自动打包实施计划
 
+> [!NOTE]
+> This document may not reflect the current implementation.
+> See the final report for up-to-date state:
+> [Final Report](../reports/github-actions-ci.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use compose:subagent (recommended) or compose:execute to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 创建GitHub Actions工作流，在创建版本标签时自动打包并发布Release
