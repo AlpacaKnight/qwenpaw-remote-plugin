@@ -164,6 +164,28 @@ QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`
 ./scripts/package.sh --skip-install
 ```
 
+## 自动打包发布
+
+本项目使用 GitHub Actions 自动打包发布。当创建版本标签时，会自动触发 CI 流程：
+
+### 发布步骤
+
+1. 更新 `plugin.json` 中的版本号
+2. 提交更改：`git commit -am "bump version to X.Y.Z"`
+3. 创建标签：`git tag vX.Y.Z`
+4. 推送标签：`git push origin vX.Y.Z`
+5. GitHub Actions 会自动打包并创建 Release
+
+### 手动打包
+
+如果需要手动打包，可以运行：
+
+```bash
+./scripts/package.sh
+```
+
+打包后的文件在 `dist/` 目录中。
+
 ## 安装包内容
 
 安装 ZIP 中只应包含运行所需文件：
