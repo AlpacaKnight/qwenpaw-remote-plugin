@@ -12,8 +12,36 @@ _BACKEND_INIT = _BACKEND_DIR / "__init__.py"
 _BACKEND_PLUGIN = _BACKEND_DIR / "plugin.py"
 
 
+def _ensure_qwenpaw_modules():
+    """Pre-import QwenPaw modules so they're in sys.modules.
+
+    When plugin.py is loaded via ``importlib.util.spec_from_file_location``
+    with an isolated ``submodule_search_locations``, deep absolute imports
+    may fail because the Python import machinery hasn't cached the
+    intermediate packages.
+
+    This function forces the resolution chain into ``sys.modules``
+    before the backend package is loaded.
+    """
+    # QwenPaw 2.0+ path (runtime.commands.control) — not present in 1.x
+    try:
+        import qwenpaw.runtime.commands.control  # noqa: F401
+        return
+    except ImportError:
+        pass
+
+    # QwenPaw 1.x / Desktop frozen build (app.runner.control_commands)
+    try:
+        import qwenpaw.app.runner  # noqa: F401
+        import qwenpaw.app.runner.control_commands  # noqa: F401
+    except ImportError:
+        pass
+
+
 def _load_backend():
     """Load the backend package without depending on this module's name."""
+    _ensure_qwenpaw_modules()
+
     package = sys.modules.get(_BACKEND_PACKAGE)
     if package is None:
         package_spec = importlib.util.spec_from_file_location(

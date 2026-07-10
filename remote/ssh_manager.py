@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import shlex
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -458,16 +459,35 @@ class SSHManager:
         effective_cwd = cwd or info.default_cwd
         inner_cmd = wrap_command_with_cwd(command, effective_cwd, info.remote_shell)
 
-        # Wrap with sudo if requested
+        # Determine remote shell type to apply correct command wrapping.
+        # - sh-compatible shells (bash, zsh, dash, fish): use sh -c to
+        #   ensure consistent parsing of &&, ;, nested quotes across platforms.
+        # - Windows shells (cmd, powershell): send command directly; they have
+        #   their own quoting semantics and no sh -c wrapper.
+        shell = (info.remote_shell or "").lower()
+        is_windows_shell = any(
+            s in shell for s in ("cmd", "powershell", "pwsh")
+        )
+
         if sudo:
             if not sudo_password:
                 raise ConnectionError(
                     "Sudo password not configured. "
                     "Use /remote sudo or set sudo password in profile."
                 )
+            # sudo always needs sh -c, regardless of local shell
             cmd = f"sudo -S -p '' sh -c {shlex.quote(inner_cmd)}"
-        else:
+        elif is_windows_shell:
+            # Windows shells: send raw command, no sh -c wrapper
             cmd = inner_cmd
+        else:
+            # Unix shells: use exec_command directly — SSH server invokes the
+            # user's login shell to parse the command string, so wrapping in
+            # sh -c is unnecessary for simple commands and causes quoting
+            # issues (double-shell parsing) for complex ones.
+            cmd = inner_cmd
+
+        logger.debug("[Remote] execute_command cmd=%r", cmd)
 
         def _do_exec() -> tuple[int, str, str]:
             transport = info.client.get_transport()

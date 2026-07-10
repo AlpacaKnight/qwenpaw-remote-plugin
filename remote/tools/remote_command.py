@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import shlex
 
-from qwenpaw.app.runner.control_commands.base import (
-    BaseControlCommandHandler,
-    ControlContext,
-)
+# QwenPaw 2.0+ uses runtime.commands.control (source build).
+# QwenPaw 1.x / Desktop frozen build uses app.runner.control_commands.
+try:
+    from qwenpaw.runtime.commands.control import (
+        BaseControlCommandHandler,
+        ControlContext,
+    )
+except ImportError:
+    from qwenpaw.app.runner.control_commands import (  # type: ignore[no-redef]
+        BaseControlCommandHandler,
+        ControlContext,
+    )
 
 from ..ssh_manager import get_ssh_manager
 
