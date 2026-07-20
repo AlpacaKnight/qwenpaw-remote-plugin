@@ -188,6 +188,36 @@ def make_ssh_middleware_factory():
             input_kwargs: dict[str, Any],
             next_handler: Callable[..., AsyncGenerator[Any, None]],
         ) -> AsyncGenerator[Any, None]:
+            # Get session_id from agent's request_context (QwenPaw 2.0)
+            # and set it in ContextVar so all remote tools can access it
+            request_context = getattr(agent, "_request_context", None) or {}
+            if isinstance(request_context, dict):
+                session_id = str(request_context.get("session_id") or "").strip()
+            else:
+                session_id = ""
+
+            from .context import remote_session_id
+
+            token = remote_session_id.set(session_id or None)
+            try:
+                async for chunk in self._handle_acting(
+                    session_id,
+                    input_kwargs,
+                    next_handler,
+                ):
+                    yield chunk
+            finally:
+                # Do not leak one request's session into the next request or
+                # into another concurrently running task.
+                remote_session_id.reset(token)
+
+        async def _handle_acting(
+            self,
+            session_id: str,
+            input_kwargs: dict[str, Any],
+            next_handler: Callable[..., AsyncGenerator[Any, None]],
+        ) -> AsyncGenerator[Any, None]:
+
             tool_call = input_kwargs.get("tool_call")
             if tool_call is None:
                 async for chunk in next_handler(**input_kwargs):
@@ -225,10 +255,6 @@ def make_ssh_middleware_factory():
                 async for chunk in next_handler(**input_kwargs):
                     yield chunk
                 return
-
-            # Get session_id from agent's request_context (QwenPaw 2.0)
-            request_context = getattr(agent, "_request_context", None) or {}
-            session_id = request_context.get("session_id", "")
 
             if not session_id:
                 async for chunk in next_handler(**input_kwargs):
