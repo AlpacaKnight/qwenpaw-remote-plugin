@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -42,6 +43,13 @@ def _load_backend():
     """Load the backend package without depending on this module's name."""
     _ensure_qwenpaw_modules()
 
+    # QwenPaw loads the entry as a package (plugin_<id>). Keep backend
+    # modules beneath it so isolation cleanup preserves lazy imports and
+    # the namespace loader applies the host import rules.
+    if __package__ and "__path__" in globals():
+        return importlib.import_module(".remote.plugin", package=__package__)
+
+    # Compatibility with loaders that execute the entry as a plain module.
     package = sys.modules.get(_BACKEND_PACKAGE)
     if package is None:
         package_spec = importlib.util.spec_from_file_location(
