@@ -5,7 +5,7 @@ import logging
 from agentscope.message import TextBlock
 from agentscope.tool import ToolResponse
 
-from ..context import get_remote_session_id
+from ..session import get_remote_session_id
 from ..shell_wrapper import _execute_remote
 
 logger = logging.getLogger(__name__)

@@ -19,6 +19,23 @@ from .ssh_types import (
 logger = logging.getLogger(__name__)
 
 
+class ChannelOpenError(ConnectionError):
+    """The SSH server did not answer a channel-open request."""
+
+
+def _close_connection(info: "SSHConnectionInfo") -> None:
+    """Close a connection and its jump host off the event loop."""
+    try:
+        info.client.close()
+    except Exception:
+        pass
+    if info.jump_client is not None:
+        try:
+            info.jump_client.close()
+        except Exception:
+            pass
+
+
 class SSHManager:
     """Singleton manager for SSH connections keyed by session_id."""
 
@@ -34,6 +51,7 @@ class SSHManager:
             cls._instance._env_cache: dict[str, RemoteEnvSnapshot] = {}
             cls._instance._ENV_TTL = 60.0  # seconds
             cls._instance._sudo_state: dict[str, SudoState] = {}
+            cls._instance._exec_locks: dict[str, asyncio.Lock] = {}
         return cls._instance
 
     async def connect(
@@ -54,6 +72,7 @@ class SSHManager:
         jump_password: str = "",
         jump_key_path: str = "",
         jump_passphrase: str = "",
+        probe: bool = True,
     ) -> dict:
         """Establish an SSH connection and store it for the session.
 
@@ -70,6 +89,12 @@ class SSHManager:
             raise ValueError("username is required")
 
         async with self._lock:
+            # A new connection starts a fresh security context: never reuse
+            # cached sudo credentials or environment data from a previous
+            # target under the same session id.
+            self._sudo_state.pop(session_id, None)
+            self._env_cache.pop(session_id, None)
+
             # Disconnect existing connection for this session
             if session_id in self._connections:
                 old = self._connections[session_id]
@@ -116,12 +141,20 @@ class SSHManager:
                 connect_kwargs["key_filename"] = key_path
             if passphrase:
                 connect_kwargs["passphrase"] = passphrase
+            if password or key_path:
+                # Avoid scanning local keys / the SSH agent when explicit
+                # credentials are given; this shortens authentication.
+                connect_kwargs["look_for_keys"] = False
+                connect_kwargs["allow_agent"] = False
             if sock is not None:
                 connect_kwargs["sock"] = sock
             return connect_kwargs
 
         def _new_client() -> paramiko.SSHClient:
             client = paramiko.SSHClient()
+            # Verify keys for hosts already present in known_hosts; only
+            # first-time hosts are auto-added.
+            client.load_system_host_keys()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             return client
 
@@ -144,6 +177,7 @@ class SSHManager:
                     transport = jump_client.get_transport()
                     if transport is None or not transport.is_active():
                         raise ConnectionError("Jump host SSH transport is closed")
+                    transport.join_thread = False
                     sock = transport.open_channel(
                         "direct-tcpip",
                         (host, port),
@@ -208,6 +242,14 @@ class SSHManager:
                 f"Could not connect to {host}:{port}{via}: {e}"
             ) from e
 
+        # Do not wait for packetizer threads on close; a nested jump-host
+        # transport can block the join for up to 10 seconds.
+        for _client in (client, jump_client):
+            if _client is not None:
+                _transport = _client.get_transport()
+                if _transport is not None:
+                    _transport.join_thread = False
+
         info = SSHConnectionInfo(
             client=client,
             host=host,
@@ -245,6 +287,33 @@ class SSHManager:
             if self._heartbeat_task is None:
                 self._start_heartbeat()
 
+        # Resolve the remote working directory and shell in a single channel
+        # lifecycle. A separate background probe would open a second channel
+        # concurrently with the first user command, which can deadlock
+        # nested jump-host transports.
+        if probe:
+            try:
+                returncode, stdout, _ = await self.execute_command(
+                    session_id,
+                    "pwd; printf '%s\\n' \"$SHELL\"",
+                    timeout=5,
+                    retry=False,
+                )
+                lines = [
+                    line.strip()
+                    for line in stdout.splitlines()
+                    if line.strip()
+                ]
+                if returncode == 0 and lines:
+                    info.default_cwd = lines[0]
+                    if len(lines) > 1:
+                        info.remote_shell = lines[1]
+            except Exception as e:
+                logger.debug(
+                    "[Remote] Could not detect remote shell/cwd: %s",
+                    e,
+                )
+
         logger.info(
             "[Remote] Connected: %s@%s:%d (session=%s)",
             username,
@@ -252,9 +321,6 @@ class SSHManager:
             port,
             session_id,
         )
-
-        # Auto-detect remote environment in background
-        asyncio.create_task(self._safe_detect_env(session_id))
 
         return info.to_dict()
 
@@ -311,19 +377,13 @@ class SSHManager:
             info = self._connections.pop(session_id, None)
             self._reconnect_params.pop(session_id, None)
             self._sudo_state.pop(session_id, None)
+            self._env_cache.pop(session_id, None)
+            self._exec_locks.pop(session_id, None)
 
         if info is None:
             return False
 
-        try:
-            info.client.close()
-        except Exception:
-            pass
-        if info.jump_client is not None:
-            try:
-                info.jump_client.close()
-            except Exception:
-                pass
+        await asyncio.to_thread(_close_connection, info)
 
         logger.info(
             "[Remote] Disconnected %s@%s:%d (session=%s)",
@@ -345,17 +405,11 @@ class SSHManager:
             for sid, _info in matches:
                 self._connections.pop(sid, None)
                 self._reconnect_params.pop(sid, None)
+                self._sudo_state.pop(sid, None)
+                self._env_cache.pop(sid, None)
 
         for sid, info in matches:
-            try:
-                info.client.close()
-            except Exception:
-                pass
-            if info.jump_client is not None:
-                try:
-                    info.jump_client.close()
-                except Exception:
-                    pass
+            await asyncio.to_thread(_close_connection, info)
             logger.info(
                 "[Remote] Disconnected profile %s connection "
                 "%s@%s:%d (session=%s)",
@@ -378,17 +432,11 @@ class SSHManager:
             for sid, _info in matches:
                 self._connections.pop(sid, None)
                 self._reconnect_params.pop(sid, None)
+                self._sudo_state.pop(sid, None)
+                self._env_cache.pop(sid, None)
 
         for sid, info in matches:
-            try:
-                info.client.close()
-            except Exception:
-                pass
-            if info.jump_client is not None:
-                try:
-                    info.jump_client.close()
-                except Exception:
-                    pass
+            await asyncio.to_thread(_close_connection, info)
             logger.info(
                 "[Remote] Disconnected jump host %s connection "
                 "%s@%s:%d (session=%s)",
@@ -399,6 +447,12 @@ class SSHManager:
                 sid,
             )
         return len(matches)
+
+    def get_single_session_id(self) -> Optional[str]:
+        """Return the session id when exactly one connection is active."""
+        if len(self._connections) != 1:
+            return None
+        return next(iter(self._connections))
 
     def get_connection(self, session_id: str) -> Optional[SSHConnectionInfo]:
         """Get the active connection for a session, or None."""
@@ -424,6 +478,7 @@ class SSHManager:
                 except Exception:
                     pass
             self._connections.pop(session_id, None)
+            self._env_cache.pop(session_id, None)
             return None
 
         info.last_used = datetime.now(timezone.utc)
@@ -437,13 +492,93 @@ class SSHManager:
         cwd: Optional[str] = None,
         sudo: bool = False,
         sudo_password: str = "",
+        retry: bool = True,
     ) -> tuple[int, str, str]:
         """Execute a command on the remote host.
+
+        Serialised per session: opening channels concurrently on the same
+        paramiko transport (especially through a jump host) can deadlock,
+        so background probes and user commands must not overlap.
+
+        On a channel-open failure or a lost connection the manager
+        reconnects once with the cached parameters and retries.
 
         Returns (returncode, stdout, stderr).
         Raises ConnectionError if no active connection.
         """
+        lock = self._exec_locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._exec_locks[session_id] = lock
+        async with lock:
+            return await self._execute_command_locked(
+                session_id,
+                command,
+                timeout,
+                cwd,
+                sudo,
+                sudo_password,
+                allow_reconnect=retry,
+            )
+
+    async def _reconnect_locked(self, session_id: str) -> bool:
+        """Reconnect using cached parameters; caller holds the exec lock."""
+        params = self._reconnect_params.get(session_id)
+        if not params:
+            return False
+        old = self._connections.get(session_id)
+        old_cwd = old.default_cwd if old is not None else "/"
+        old_shell = old.remote_shell if old is not None else ""
+        try:
+            await self.connect(
+                session_id=session_id,
+                probe=False,
+                **params,
+            )
+        except Exception as e:
+            logger.warning("[Remote] Auto-reconnect failed: %s", e)
+            return False
+        new = self._connections.get(session_id)
+        if new is not None:
+            new.default_cwd = old_cwd
+            new.remote_shell = old_shell
+        logger.info(
+            "[Remote] Reconnected session %s after channel failure",
+            session_id,
+        )
+        return True
+
+    async def _execute_command_locked(
+        self,
+        session_id: str,
+        command: str,
+        timeout: float = 60.0,
+        cwd: Optional[str] = None,
+        sudo: bool = False,
+        sudo_password: str = "",
+        allow_reconnect: bool = False,
+        _attempt: int = 1,
+    ) -> tuple[int, str, str]:
         info = self.get_connection(session_id)
+        if info is None:
+            if (
+                allow_reconnect
+                and _attempt == 1
+                and await self._reconnect_locked(session_id)
+            ):
+                return await self._execute_command_locked(
+                    session_id,
+                    command,
+                    timeout,
+                    cwd,
+                    sudo,
+                    sudo_password,
+                    allow_reconnect=False,
+                    _attempt=2,
+                )
+            raise ConnectionError(
+                f"No active SSH connection for session {session_id}"
+            )
         if info is None:
             raise ConnectionError(
                 f"No active SSH connection for session {session_id}"
@@ -494,7 +629,12 @@ class SSHManager:
             if transport is None:
                 raise ConnectionError("SSH transport is closed")
 
-            channel = transport.open_session()
+            try:
+                channel = transport.open_session(
+                    timeout=min(timeout, 10),
+                )
+            except Exception as exc:
+                raise ChannelOpenError(str(exc)) from exc
             channel.settimeout(timeout)
             channel.exec_command(cmd)
 
@@ -544,6 +684,25 @@ class SSHManager:
 
         try:
             return await asyncio.to_thread(_do_exec)
+        except ChannelOpenError as e:
+            if (
+                allow_reconnect
+                and _attempt == 1
+                and await self._reconnect_locked(session_id)
+            ):
+                return await self._execute_command_locked(
+                    session_id,
+                    command,
+                    timeout,
+                    cwd,
+                    sudo,
+                    sudo_password,
+                    allow_reconnect=False,
+                    _attempt=2,
+                )
+            raise ConnectionError(
+                f"Remote command execution failed: {e}"
+            ) from e
         except ConnectionError:
             raise
         except Exception as e:
@@ -604,25 +763,27 @@ class SSHManager:
         """Close all SSH connections (called on shutdown)."""
         self._stop_heartbeat()
         async with self._lock:
-            for sid, info in self._connections.items():
-                try:
-                    info.client.close()
-                except Exception:
-                    pass
-                if info.jump_client is not None:
-                    try:
-                        info.jump_client.close()
-                    except Exception:
-                        pass
-                logger.info(
-                    "[Remote] Closed connection %s@%s:%d (session=%s)",
-                    info.username,
-                    info.host,
-                    info.port,
-                    sid,
-                )
+            items = list(self._connections.items())
             self._connections.clear()
             self._reconnect_params.clear()
+            self._env_cache.clear()
+            self._sudo_state.clear()
+            self._exec_locks.clear()
+        if items:
+            await asyncio.gather(
+                *(
+                    asyncio.to_thread(_close_connection, info)
+                    for _, info in items
+                )
+            )
+        for sid, info in items:
+            logger.info(
+                "[Remote] Closed connection %s@%s:%d (session=%s)",
+                info.username,
+                info.host,
+                info.port,
+                sid,
+            )
 
     def list_connections(self) -> list[dict]:
         """Return sanitized info for all active connections."""
@@ -732,6 +893,7 @@ class SSHManager:
             async with self._lock:
                 for sid in stale:
                     info = self._connections.pop(sid, None)
+                    self._env_cache.pop(sid, None)
                     if info is not None:
                         info.health.status = "stale"
                         info.health.connected = False
@@ -774,6 +936,10 @@ class SSHManager:
                 "No cached connection parameters. Use remote_connect instead."
             )
 
+        # connect() clears per-session secrets; reconnect targets the same
+        # host, so restore the sudo password afterwards.
+        previous_sudo = self._sudo_state.get(session_id)
+
         # Close stale connection if present
         if info is not None:
             try:
@@ -787,7 +953,10 @@ class SSHManager:
                     pass
             self._connections.pop(session_id, None)
 
-        return await self.connect(session_id=session_id, **params)
+        result = await self.connect(session_id=session_id, **params)
+        if previous_sudo is not None:
+            self._sudo_state[session_id] = previous_sudo
+        return result
 
     # ── Health API ──────────────────────────────────────────────────
 
@@ -832,6 +1001,7 @@ class SSHManager:
             # Remove stale connection
             async with self._lock:
                 self._connections.pop(session_id, None)
+                self._env_cache.pop(session_id, None)
             try:
                 info.client.close()
             except Exception:
@@ -869,6 +1039,7 @@ class SSHManager:
                 )
                 async with self._lock:
                     self._connections.pop(session_id, None)
+                self._env_cache.pop(session_id, None)
                 try:
                     info.client.close()
                 except Exception:
@@ -1054,12 +1225,20 @@ done"""
                 connect_kwargs["key_filename"] = key_path
             if passphrase:
                 connect_kwargs["passphrase"] = passphrase
+            if password or key_path:
+                # Avoid scanning local keys / the SSH agent when explicit
+                # credentials are given; this shortens authentication.
+                connect_kwargs["look_for_keys"] = False
+                connect_kwargs["allow_agent"] = False
             if sock is not None:
                 connect_kwargs["sock"] = sock
             return connect_kwargs
 
         def _new_client() -> paramiko.SSHClient:
             client = paramiko.SSHClient()
+            # Verify keys for hosts already present in known_hosts; only
+            # first-time hosts are auto-added.
+            client.load_system_host_keys()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             return client
 
@@ -1082,6 +1261,7 @@ done"""
                     transport = jump_client.get_transport()
                     if transport is None or not transport.is_active():
                         raise ConnectionError("Jump host SSH transport is closed")
+                    transport.join_thread = False
                     sock = transport.open_channel(
                         "direct-tcpip",
                         (host, port),
@@ -1109,6 +1289,8 @@ done"""
 
                 # Quick env detection
                 transport = client.get_transport()
+                if transport is not None:
+                    transport.join_thread = False
                 channel = transport.open_session()
                 channel.exec_command(
                     "uname -s; echo $SHELL"

@@ -43,8 +43,22 @@ cp -R remote "$STAGING/"
 mkdir -p "$STAGING/ui/dist"
 cp ui/dist/* "$STAGING/ui/dist/"
 
-if [ ! -f "$STAGING/ui/dist/index.js" ]; then
-  echo "ui/dist/index.js was not copied into the package staging directory." >&2
+# The host serves the bundle from a stable URL, so name the packaged entry
+# after the version to defeat browser caching. The repository manifest keeps
+# the bare path checked above.
+VERSIONED_FRONTEND_ENTRY="ui/dist/index.${VERSION}.js"
+mv "$STAGING/ui/dist/index.js" "$STAGING/$VERSIONED_FRONTEND_ENTRY"
+node -e '
+const fs = require("fs");
+const [file, entry] = process.argv.slice(1);
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+data.entry = data.entry || {};
+data.entry.frontend = entry;
+fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+' "$STAGING/plugin.json" "$VERSIONED_FRONTEND_ENTRY"
+
+if [ ! -f "$STAGING/$VERSIONED_FRONTEND_ENTRY" ]; then
+  echo "$VERSIONED_FRONTEND_ENTRY was not copied into the package staging directory." >&2
   exit 1
 fi
 

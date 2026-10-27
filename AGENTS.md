@@ -18,8 +18,7 @@ QwenPaw 插件，为聊天会话提供透明的 SSH 远程执行能力。连接�
 
 ```
 plugin.py              → 插件系统后端入口 shim（导出 remote.plugin.plugin）
-remote/plugin.py       → 后端实现入口（注册 tools、commands、hooks）
-remote/context.py      → ContextVar，用于会话级 SSH 状态隔离
+remote/plugin.py       → 后端实现入口（注册 tools、commands、middleware、hooks、REST 路由）
 remote/ssh_types.py    → SSH 数据结构、健康状态、环境快照和 cwd 命令包装 helper
 remote/ssh_manager.py  → 单例 SSH 连接管理器（paramiko）
 remote/shell_wrapper.py → 异步中间件：拦截 shell 命令 → SSH 执行
@@ -31,9 +30,12 @@ ui/src/index.ts        → 单文件 React 前端（无 JSX，直接用 createEl
 
 ## 核心模式
 
-- **猴子补丁（Monkey-patching）**：插件启动时 patch `QwenPawAgent._create_toolkit` 和 `QwenPawAgent.reply`，在不修改核心框架的前提下注入中间件。
-- **ContextVar 会话隔离**：`remote/context.py` 持有 `ContextVar[str | None]`，中间件在调用栈深处无需显式传参即可获取当前 session ID。
-- **异步生成器中间件**：`remote/shell_wrapper.py` 在检测到活跃 SSH 连接时拦截 `execute_shell_command`，否则 yield 给下一个 handler。
+- **官方中间件注册**：2.x 通过 `api.register_middleware()` 注册 `agentscope` 的 `MiddlewareBase` 工厂；`remote/shell_wrapper.py` 在检测到活跃 SSH 连接时拦截 `execute_shell_command`，否则交给下一个 handler。不要再猴补丁 `QwenPawAgent`。
+- **宿主会话上下文**：工具和中间件通过 `qwenpaw.config.context.get_current_session_id()` 获取当前 session ID，不访问 `agent._request_context` 等私有属性。
+- **仅支持 QwenPaw 2.2.2+**：manifest 声明 `qwenpaw_version >=2.2.2,<2.99.0`，不保留旧版本兼容分支。
+- **远端工作目录**：连接成功后自动探测远端 `pwd` 作为 `default_cwd`；透明转发忽略智能体传入的本地 `cwd`，始终使用远端目录；`register_prompt_section` 把远端目录写入系统提示。
+- **命令串行化**：同一 session 的 SSH 命令通过 `asyncio.Lock` 串行执行，`open_session` 带超时。跳板机嵌套 transport 上并发打开 channel 会导致永久阻塞，不要移除该锁或改回后台自动探测。
+- **自动重连**：channel 打开失败或连接被判定失效时，使用缓存的连接参数自动重连并重试一次，保留原 `default_cwd`/`remote_shell`。
 - **单例 `SSHManager`**：所有连接以 `session_id` 为键。负责跳板机隧道、健康检查、命令超时。
 - **前端宿主 API**：React、ReactDOM、Ant Design 由宿主通过 `window.QwenPaw.host` 提供，不要直接 import。
 
@@ -48,11 +50,14 @@ ui/src/index.ts        → 单文件 React 前端（无 JSX，直接用 createEl
 
 - `plugin.json` 声明元数据、tools 和 commands
 - `plugin.py` 导出 `plugin` 实例，提供 `register(api)` 方法
-- 注册方式：`api.register_tool()`、`api.register_control_command()`、`api.register_startup_hook()`、`api.register_shutdown_hook()`
-- 工具返回 `qwenpaw` 的 `ToolResponse`；文本块使用 `agentscope` 的 `TextBlock`
+- 注册方式：`api.register_tool()`、`api.register_slash_command()`、`api.register_middleware()`、`api.register_http_router()`、`api.register_startup_hook()`、`api.register_shutdown_hook()`
+- 工具返回 `agentscope` 的 `ToolResponse`；文本块使用 `agentscope` 的 `TextBlock`
+- 新 SDK 的 `PluginContext` 目前不提供 middleware/HTTP 路由能力，因此本插件不声明 `sdk` 块，继续使用受支持的 `PluginApi`（与官方 `plugins/middleware-demo` 一致）
 
 ## 常见陷阱
 
 - 前端 `ui/dist/` 不提交到仓库 — 修改 TypeScript 后必须重新构建（在 `ui/` 下执行 `npm run build`），打包脚本会把构建产物放进 ZIP。
 - `SSHManager` 通过 `__new__` 实现单例 — 不要期望多次实例化能获得隔离。
 - 跳板机连接会创建嵌套 transport 链；必须按正确顺序断开（由 `SSHManager.disconnect()` 管理）。
+- 不要访问宿主私有成员（`api._registry`、`agent._request_context`、registry 内部对象）；会话 ID 统一用 `qwenpaw.config.context.get_current_session_id()`。
+- `profiles.json` 含明文密码/密钥口令，写入时会强制目录 `0700`、文件 `0600`；不要放宽权限或把该文件提交到仓库。

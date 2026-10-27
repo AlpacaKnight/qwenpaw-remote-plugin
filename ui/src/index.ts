@@ -165,14 +165,39 @@ function buildPlugin() {
 
   function getSessionId(): string {
     try {
-      const sid = (window as any).currentSessionId ||
-                  (window as any).sessionId ||
-                  localStorage?.getItem?.("sessionId");
-      if (sid) return sid;
+      const host = (window as any).QwenPaw?.host;
+      const fromHost =
+        typeof host?.getCurrentSessionId === "function"
+          ? host.getCurrentSessionId()
+          : "";
+      const sid =
+        fromHost ||
+        (window as any).currentSessionId ||
+        (window as any).sessionId ||
+        localStorage?.getItem?.("remote.sessionId") ||
+        localStorage?.getItem?.("sessionId");
+      if (sid) {
+        try {
+          localStorage?.setItem?.("remote.sessionId", sid);
+        } catch (e) {
+          console.debug("[Remote] Error caching sessionId:", e);
+        }
+        return sid;
+      }
     } catch (e) {
       console.debug("[Remote] Error getting sessionId:", e);
     }
-    return "default-session";
+    return "";
+  }
+
+  const CONNECTION_EVENT = "remote-connection-changed";
+
+  function notifyConnectionChanged(): void {
+    try {
+      window.dispatchEvent(new Event(CONNECTION_EVENT));
+    } catch (e) {
+      console.debug("[Remote] Error dispatching connection event:", e);
+    }
   }
 
   async function apiFetch(path: string, options: RequestInit = {}) {
@@ -577,7 +602,12 @@ function buildPlugin() {
     useEffect(() => {
       fetchData();
       const interval = setInterval(fetchData, 10000);
-      return () => clearInterval(interval);
+      const onConnectionChanged = () => fetchData();
+      window.addEventListener(CONNECTION_EVENT, onConnectionChanged);
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener(CONNECTION_EVENT, onConnectionChanged);
+      };
     }, [fetchData]);
 
     const handleSave = async (values: any) => {
@@ -600,6 +630,7 @@ function buildPlugin() {
         setModalOpen(false);
         setEditingProfile(null);
         form.resetFields();
+        notifyConnectionChanged();
         fetchData();
       } catch (e: any) {
         antdMessage.error(`Save failed: ${e.message}`);
@@ -682,6 +713,7 @@ function buildPlugin() {
           method: "DELETE",
         });
         antdMessage.success("Jump host deleted");
+        notifyConnectionChanged();
         fetchData();
       } catch (e: any) {
         antdMessage.error(`Delete jump host failed: ${e.message}`);
@@ -697,21 +729,14 @@ function buildPlugin() {
 
       const isCurrentlyConnected = profile.id === activeProfileId;
 
-      if (isCurrentlyConnected) {
-        // Disconnect
-        try {
+      setConnectingId(profile.id);
+      try {
+        if (isCurrentlyConnected) {
           await apiFetch(`/remote/connections/${sessionId}`, {
             method: "DELETE",
           });
           antdMessage.success("Disconnected");
-          fetchData();
-        } catch (e: any) {
-          antdMessage.error(`Disconnect failed: ${e.message}`);
-        }
-      } else {
-        // Connect
-        setConnectingId(profile.id);
-        try {
+        } else {
           const result = await apiFetch(`/remote/profiles/${profile.id}/connect`, {
             method: "POST",
             body: JSON.stringify({ session_id: sessionId }),
@@ -729,13 +754,17 @@ function buildPlugin() {
               });
             }
           }
-
-          fetchData();
-        } catch (e: any) {
-          antdMessage.error(zh ? `连接失败: ${e.message}` : `Connection failed: ${e.message}`);
-        } finally {
-          setConnectingId(null);
         }
+        notifyConnectionChanged();
+        fetchData();
+      } catch (e: any) {
+        antdMessage.error(
+          zh
+            ? `${isCurrentlyConnected ? "断开" : "连接"}失败: ${e.message}`
+            : `${isCurrentlyConnected ? "Disconnect" : "Connection"} failed: ${e.message}`,
+        );
+      } finally {
+        setConnectingId(null);
       }
     };
 
@@ -745,6 +774,7 @@ function buildPlugin() {
           method: "DELETE",
         });
         antdMessage.success("Profile deleted");
+        notifyConnectionChanged();
         fetchData();
       } catch (e: any) {
         antdMessage.error(`Delete failed: ${e.message}`);
@@ -1459,7 +1489,12 @@ function buildPlugin() {
     useEffect(() => {
       fetchStatus();
       const interval = setInterval(fetchStatus, 5000);
-      return () => clearInterval(interval);
+      const onConnectionChanged = () => fetchStatus();
+      window.addEventListener(CONNECTION_EVENT, onConnectionChanged);
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener(CONNECTION_EVENT, onConnectionChanged);
+      };
     }, [fetchStatus]);
 
     const handleDisconnect = async () => {
@@ -1469,6 +1504,7 @@ function buildPlugin() {
         await apiFetch(`/remote/connections/${sessionId}`, {
           method: "DELETE",
         });
+        notifyConnectionChanged();
         fetchStatus();
       } catch (e: any) {
         antdMessage.error(zh ? `断开连接失败: ${e.message}` : `Disconnect failed: ${e.message}`);
@@ -1484,6 +1520,7 @@ function buildPlugin() {
           method: "POST",
         });
         antdMessage.success(zh ? "已重连" : "Reconnected");
+        notifyConnectionChanged();
         fetchStatus();
       } catch (e: any) {
         antdMessage.error(zh ? `重连失败: ${e.message}` : `Reconnect failed: ${e.message}`);
@@ -1525,6 +1562,7 @@ function buildPlugin() {
             }
           }
         }
+        notifyConnectionChanged();
         fetchStatus();
       } catch (e: any) {
         antdMessage.error(

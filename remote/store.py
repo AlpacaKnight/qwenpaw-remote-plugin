@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -13,8 +14,18 @@ _REMOTE_DIR = WORKING_DIR / "remote"
 _PROFILES_FILE = _REMOTE_DIR / "profiles.json"
 
 
+def _restrict_permissions() -> None:
+    """Keep stored credentials readable only by the current user."""
+    for path, mode in ((_REMOTE_DIR, 0o700), (_PROFILES_FILE, 0o600)):
+        try:
+            os.chmod(path, mode)
+        except OSError:
+            pass
+
+
 def _load_profiles_file() -> dict[str, Any]:
     if _PROFILES_FILE.is_file():
+        _restrict_permissions()
         try:
             return json.loads(_PROFILES_FILE.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
@@ -28,6 +39,7 @@ def _save_profiles_file(data: dict[str, Any]) -> None:
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    _restrict_permissions()
 
 
 def list_profiles() -> list[dict[str, Any]]:

@@ -5,7 +5,7 @@ import logging
 from agentscope.message import TextBlock
 from agentscope.tool import ToolResponse
 
-from ..context import get_remote_session_id
+from ..session import get_remote_session_id
 from ..ssh_manager import get_ssh_manager
 
 logger = logging.getLogger(__name__)

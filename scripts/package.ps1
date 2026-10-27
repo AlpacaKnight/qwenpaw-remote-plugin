@@ -37,8 +37,28 @@ Copy-Item -LiteralPath remote -Destination $staging -Recurse
 New-Item -ItemType Directory -Force -Path (Join-Path $staging "ui\dist") | Out-Null
 Copy-Item -Path "ui\dist\*" -Destination (Join-Path $staging "ui\dist")
 
-if (-not (Test-Path -LiteralPath (Join-Path $staging "ui/dist/index.js") -PathType Leaf)) {
-    throw "ui/dist/index.js was not copied into the package staging directory."
+# Version the packaged entry so browsers cannot reuse a cached bundle. The
+# repository manifest keeps the bare path checked above.
+$versionedFrontendEntry = "ui/dist/index.$($plugin.version).js"
+$stagedIndex = Join-Path $staging "ui/dist/index.js"
+$stagedVersioned = Join-Path $staging $versionedFrontendEntry
+Move-Item -LiteralPath $stagedIndex -Destination $stagedVersioned -Force
+
+$stagedManifestPath = Join-Path $staging "plugin.json"
+$stagedManifest = Get-Content -Raw -Encoding UTF8 $stagedManifestPath | ConvertFrom-Json
+if (-not $stagedManifest.entry) {
+    $stagedManifest | Add-Member -NotePropertyName entry -NotePropertyValue ([pscustomobject]@{})
+}
+$stagedManifest.entry.frontend = $versionedFrontendEntry
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText(
+    $stagedManifestPath,
+    ($stagedManifest | ConvertTo-Json -Depth 20),
+    $utf8NoBom
+)
+
+if (-not (Test-Path -LiteralPath $stagedVersioned -PathType Leaf)) {
+    throw "$versionedFrontendEntry was not copied into the package staging directory."
 }
 
 Get-ChildItem -Path $staging -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force

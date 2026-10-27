@@ -1,7 +1,7 @@
 {
   "id": "remote",
   "name": "Remote SSH",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "type": "general",
   "description": "SSH into remote devices and execute shell commands transparently on remote machines.",
   "author": "AlpacaKnight",
@@ -10,10 +10,9 @@
     "backend": "plugin.py"
   },
   "dependencies": ["paramiko>=3.0.0"],
-  "min_version": "1.1.7",
   "qwenpaw_version": {
-    "min": "2.0.0",
-    "max": "2.1.0"
+    "min": "2.2.2",
+    "max": "2.99.0"
   },
   "meta": {
     "category": "remote-access",

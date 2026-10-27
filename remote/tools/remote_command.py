@@ -1,27 +1,16 @@
-"""Control command handler for /remote."""
+"""Slash command handler for /remote."""
 
 from __future__ import annotations
 
 import shlex
 
-# QwenPaw 2.0+ uses runtime.commands.control (source build).
-# QwenPaw 1.x / Desktop frozen build uses app.runner.control_commands.
-try:
-    from qwenpaw.runtime.commands.control import (
-        BaseControlCommandHandler,
-        ControlContext,
-    )
-except ImportError:
-    from qwenpaw.app.runner.control_commands import (  # type: ignore[no-redef]
-        BaseControlCommandHandler,
-        ControlContext,
-    )
+from agentscope.message import Msg, TextBlock
 
 from ..ssh_manager import get_ssh_manager
 
 
-class RemoteCommandHandler(BaseControlCommandHandler):
-    """Handle /remote control commands.
+class RemoteCommandHandler:
+    """Handle /remote slash commands.
 
     Supported forms:
     - /remote
@@ -35,13 +24,21 @@ class RemoteCommandHandler(BaseControlCommandHandler):
     - /remote 执行pwd
     """
 
-    command_name = "/remote"
+    command_name = "remote"
 
-    async def handle(self, context: ControlContext) -> str:
-        raw_args = context.args.get("_raw_args", "").strip()
+    async def __call__(self, ctx, args: str) -> Msg:
+        text = await self.handle(ctx.session_id, args or "")
+        return Msg(
+            name="assistant",
+            role="assistant",
+            content=[TextBlock(type="text", text=text)],
+        )
+
+    async def handle(self, session_id: str, raw_args: str) -> str:
+        raw_args = raw_args.strip()
 
         if not raw_args or raw_args.lower() in ("status", "list", "ls"):
-            return self._format_status(context.session_id)
+            return self._format_status(session_id)
 
         lowered = raw_args.lower()
         if lowered in ("help", "-h", "--help"):
@@ -49,29 +46,29 @@ class RemoteCommandHandler(BaseControlCommandHandler):
 
         if lowered.startswith("connect"):
             return await self._connect(
-                context.session_id,
+                session_id,
                 raw_args[len("connect") :].strip(),
             )
 
         if lowered in ("disconnect", "close", "off"):
-            return await self._disconnect(context.session_id)
+            return await self._disconnect(session_id)
 
         if lowered in ("reconnect", "reconn"):
-            return await self._reconnect(context.session_id)
+            return await self._reconnect(session_id)
 
         if lowered.startswith("cd "):
-            return await self._cd(context.session_id, raw_args[3:].strip())
+            return await self._cd(session_id, raw_args[3:].strip())
 
         if lowered.startswith("sudo "):
-            return await self._sudo(context.session_id, raw_args[5:].strip())
+            return await self._sudo(session_id, raw_args[5:].strip())
 
         if lowered.startswith("set-sudo ") or lowered.startswith("setsudo "):
-            return await self._set_sudo(context.session_id, raw_args.split(" ", 1)[1].strip() if " " in raw_args else "")
+            return await self._set_sudo(session_id, raw_args.split(" ", 1)[1].strip() if " " in raw_args else "")
 
         command = self._extract_command(raw_args)
         if not command:
             return self._help()
-        return await self._exec(context.session_id, command)
+        return await self._exec(session_id, command)
 
     async def _connect(self, session_id: str, args: str) -> str:
         parsed = self._parse_args(args)

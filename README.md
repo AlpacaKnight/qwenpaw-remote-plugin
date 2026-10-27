@@ -2,6 +2,10 @@
 
 Remote SSH 是一个 QwenPaw 插件，用于给当前聊天会话建立 SSH 连接。连接生效后，同一会话里的 shell 命令会被转发到远端机器执行。
 
+要求 QwenPaw `>=2.2.2,<2.99.0`（见 `plugin.json` 的 `qwenpaw_version`）。
+
+9 个 remote 工具默认启用，可在 `设置 → Agent → Tools` 中按需关闭。
+
 ## 功能
 
 - `remote_connect`：使用密码或 SSH 私钥连接远端机器。
@@ -15,6 +19,7 @@ Remote SSH 是一个 QwenPaw 插件，用于给当前聊天会话建立 SSH 连�
 - `remote_sudo`：使用 sudo 权限在远端机器执行命令，支持非交互式密码认证。
 - `/remote`：在对话中管理当前会话的 SSH 连接，支持连接、断开、切换目录、sudo 执行等操作。
 - 透明 shell 转发：连接成功后，同一会话里的 `execute_shell_command` 会通过 SSH 在远端执行。
+- 远端工作目录：连接成功后自动探测远端当前目录并作为默认工作目录；透明命令始终在远端目录执行，不会误用本地工作区路径。
 - 前端管理页：在 Remote SSH 页面保存多个连接选项、跳板机等配置，并用每个选项上的开关控制当前 SSH 连接。
 - 跳板机：连接选项可以选择已保存的 jump host，也可以通过命令行参数临时指定跳板机。
 - Web 状态栏：在 QwenPaw Web 端 header 显示当前会话的 SSH 状态，并可快速连接或断开已保存设备。
@@ -143,7 +148,7 @@ QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`
 
 ```json
 {
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"entry": {
 		"frontend": "ui/dist/index.js"
 	}
@@ -152,7 +157,7 @@ QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`
 
 打包脚本会校验这个一致性；如果 `entry.frontend` 被改成其他路径，打包会失败。
 
-如果需要避免浏览器缓存旧的前端 bundle，应由 QwenPaw Web 宿主在加载插件前端时根据插件版本自动追加 cache-busting 参数，例如把 `ui/dist/index.js` 加载为 `ui/dist/index.js?v=0.2.0`。插件包内的 `plugin.json` 仍应保持裸路径，避免把版本号写死到入口路径里。
+打包脚本会在安装包内把 `entry.frontend` 改写为 `ui/dist/index.<version>.js`（仓库里的 `plugin.json` 仍保持裸路径），这样浏览器会按新文件名重新拉取 bundle，避免升级后继续使用旧缓存。
 
 如果本机已经安装过前端依赖，可以跳过 `npm ci`：
 
@@ -203,8 +208,8 @@ QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`
 如果 QwenPaw 运行在 Docker 中，插件目录通常位于容器内的 `/app/working/plugins`。可以把打包后的 ZIP 复制进容器，再使用容器内的 QwenPaw CLI 强制安装：
 
 ```bash
-docker cp dist/qwenpaw-remote-plugin-0.2.0.zip copaw:/tmp/qwenpaw-remote-plugin-0.2.0.zip
-docker exec copaw sh -lc '/app/venv/bin/qwenpaw plugin install /tmp/qwenpaw-remote-plugin-0.2.0.zip --force'
+docker cp dist/qwenpaw-remote-plugin-0.3.0.zip copaw:/tmp/qwenpaw-remote-plugin-0.3.0.zip
+docker exec copaw sh -lc '/app/venv/bin/qwenpaw plugin install /tmp/qwenpaw-remote-plugin-0.3.0.zip --force'
 ```
 
 安装后可以检查 Web 端暴露的插件清单：
@@ -213,4 +218,4 @@ docker exec copaw sh -lc '/app/venv/bin/qwenpaw plugin install /tmp/qwenpaw-remo
 curl -sS http://127.0.0.1:8088/api/frontend_plugin
 ```
 
-返回内容中应包含当前版本号。`plugin.json` 中的入口应为 `ui/dist/index.js`；如果 QwenPaw Web 宿主已支持自动 cache busting，接口返回或页面实际加载的前端 URL 可以是 `ui/dist/index.js?v=<version>`。如果浏览器页面仍显示旧 UI，先完整刷新页面；必要时重启 QwenPaw Web 服务或清理浏览器缓存，确保 Web 端重新请求新的前端 bundle。
+返回内容中应包含当前版本号。安装包内 `plugin.json` 的入口是 `ui/dist/index.<version>.js`（打包时生成）；仓库里的 `plugin.json` 仍是 `ui/dist/index.js`。如果浏览器页面仍显示旧 UI，先完整刷新页面；必要时重启 QwenPaw Web 服务或清理浏览器缓存，确保 Web 端重新请求新的前端 bundle。

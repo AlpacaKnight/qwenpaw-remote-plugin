@@ -24,19 +24,7 @@ def _ensure_qwenpaw_modules():
     This function forces the resolution chain into ``sys.modules``
     before the backend package is loaded.
     """
-    # QwenPaw 2.0+ path (runtime.commands.control) — not present in 1.x
-    try:
-        import qwenpaw.runtime.commands.control  # noqa: F401
-        return
-    except ImportError:
-        pass
-
-    # QwenPaw 1.x / Desktop frozen build (app.runner.control_commands)
-    try:
-        import qwenpaw.app.runner  # noqa: F401
-        import qwenpaw.app.runner.control_commands  # noqa: F401
-    except ImportError:
-        pass
+    import qwenpaw.config.context  # noqa: F401
 
 
 def _load_backend():

@@ -1,7 +1,10 @@
 """SSH-aware shell execution and middleware factory.
 
-Supports both QwenPaw 1.x (function-based middleware + ContextVar) and
-QwenPaw 2.0+ (MiddlewareBase + api.register_middleware).
+QwenPaw 2.x registers plugin middleware through
+``PluginApi.register_middleware``. The factory below returns an
+AgentScope middleware that redirects ``execute_shell_command`` to the
+SSH connection bound to the session carried by
+``qwenpaw.config.context``.
 """
 
 import json
@@ -9,15 +12,17 @@ import logging
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 
 from agentscope.message import TextBlock
+from agentscope.middleware import MiddlewareBase
 from agentscope.tool import ToolResponse
 
+from .session import get_remote_session_id
 from .ssh_manager import get_ssh_manager
-from .ssh_types import wrap_command_with_cwd
 
 if TYPE_CHECKING:
     from agentscope.agent import Agent
 
 logger = logging.getLogger(__name__)
+diagnostic = logging.getLogger("qwenpaw.plugins.remote")
 
 
 async def _execute_remote(
@@ -64,7 +69,10 @@ async def _execute_remote(
         )
 
     # Format output matching local execute_shell_command (shell.py:499-521)
-    prefix = f"[remote: {conn.username}@{conn.host}]"
+    prefix = f"[remote: {conn.username}@{conn.host}"
+    if conn.default_cwd:
+        prefix += f":{conn.default_cwd}"
+    prefix += "]"
     if sudo:
         prefix = f"{prefix} [sudo]"
 
@@ -95,92 +103,18 @@ async def _execute_remote(
     )
 
 
-# ---------------------------------------------------------------------------
-# QwenPaw 1.x compatibility: function-based middleware + ContextVar
-# ---------------------------------------------------------------------------
-
-def make_ssh_middleware():
-    """Create SSH middleware for QwenPaw 1.x (function-based).
-
-    Returns an async generator function compatible with
-    Toolkit.register_middleware().
-    """
-    from .context import get_remote_session_id
-
-    async def ssh_middleware(
-        kwargs: dict,
-        next_handler,
-    ) -> AsyncGenerator[ToolResponse, None]:
-        tool_call = kwargs["tool_call"]
-
-        # Only intercept execute_shell_command
-        if tool_call["name"] != "execute_shell_command":
-            async for chunk in await next_handler(**kwargs):
-                yield chunk
-            return
-
-        # Check if there's an active SSH connection for this session
-        session_id = get_remote_session_id()
-        if session_id is None:
-            async for chunk in await next_handler(**kwargs):
-                yield chunk
-            return
-
-        manager = get_ssh_manager()
-        conn = manager.get_connection(session_id)
-        if conn is None:
-            # No active connection — fall back to local execution
-            async for chunk in await next_handler(**kwargs):
-                yield chunk
-            return
-
-        # Extract command and timeout from tool_call input
-        raw_input = tool_call.get("input", {})
-        if isinstance(raw_input, str):
-            try:
-                tool_input = json.loads(raw_input)
-            except (json.JSONDecodeError, TypeError):
-                tool_input = {}
-        elif isinstance(raw_input, dict):
-            tool_input = raw_input
-        else:
-            tool_input = {}
-        command = tool_input.get("command", "")
-        timeout = tool_input.get("timeout", 60.0)
-        cwd = tool_input.get("cwd", "")
-
-        if isinstance(timeout, str):
-            try:
-                timeout = float(timeout)
-            except (ValueError, TypeError):
-                timeout = 60.0
-
-        # Execute on remote — cwd is passed to execute_command which
-        # handles wrap_command_with_cwd internally
-        result = await _execute_remote(session_id, command, timeout, cwd)
-        yield result
-
-    return ssh_middleware
-
-
-# ---------------------------------------------------------------------------
-# QwenPaw 2.0+: MiddlewareBase class
-# ---------------------------------------------------------------------------
-
 def make_ssh_middleware_factory():
-    """Create a middleware factory for QwenPaw 2.0+.
+    """Create a middleware factory for ``api.register_middleware``.
 
-    Returns a factory function compatible with api.register_middleware().
     The factory is called once per request during agent assembly:
-        factory(ctx, agent_config) -> MiddlewareBase | None
+        factory(ctx, agent_config) -> MiddlewareBase
     """
-    try:
-        from agentscope.middleware import MiddlewareBase
-    except ImportError:
-        return None
 
     class SSHMiddleware(MiddlewareBase):
-        """Middleware that intercepts execute_shell_command and redirects to SSH."""
+        """Intercept ``execute_shell_command`` and redirect it to SSH."""
+
+        def __init__(self, session_id: str = ""):
+            self._session_id = session_id
 
         async def on_acting(
             self,
@@ -188,28 +122,16 @@ def make_ssh_middleware_factory():
             input_kwargs: dict[str, Any],
             next_handler: Callable[..., AsyncGenerator[Any, None]],
         ) -> AsyncGenerator[Any, None]:
-            # Get session_id from agent's request_context (QwenPaw 2.0)
-            # and set it in ContextVar so all remote tools can access it
-            request_context = getattr(agent, "_request_context", None) or {}
-            if isinstance(request_context, dict):
-                session_id = str(request_context.get("session_id") or "").strip()
-            else:
-                session_id = ""
-
-            from .context import remote_session_id
-
-            token = remote_session_id.set(session_id or None)
-            try:
-                async for chunk in self._handle_acting(
-                    session_id,
-                    input_kwargs,
-                    next_handler,
-                ):
-                    yield chunk
-            finally:
-                # Do not leak one request's session into the next request or
-                # into another concurrently running task.
-                remote_session_id.reset(token)
+            # Prefer the session captured from the request context passed to
+            # the factory; tool calls may be offloaded to a task that no
+            # longer sees the request ContextVar.
+            session_id = self._session_id or get_remote_session_id() or ""
+            async for chunk in self._handle_acting(
+                session_id,
+                input_kwargs,
+                next_handler,
+            ):
+                yield chunk
 
         async def _handle_acting(
             self,
@@ -217,40 +139,31 @@ def make_ssh_middleware_factory():
             input_kwargs: dict[str, Any],
             next_handler: Callable[..., AsyncGenerator[Any, None]],
         ) -> AsyncGenerator[Any, None]:
-
             tool_call = input_kwargs.get("tool_call")
             if tool_call is None:
                 async for chunk in next_handler(**input_kwargs):
                     yield chunk
                 return
 
-            # Only intercept execute_shell_command
             # tool_call may be a dict (agentscope) or an object with attributes
             if isinstance(tool_call, dict):
                 tool_name = tool_call.get("name")
                 raw_input = tool_call.get("input")
-                if isinstance(raw_input, str):
-                    try:
-                        tool_input = json.loads(raw_input)
-                    except (json.JSONDecodeError, TypeError):
-                        tool_input = {}
-                elif isinstance(raw_input, dict):
-                    tool_input = raw_input
-                else:
-                    tool_input = {}
             else:
                 tool_name = getattr(tool_call, "name", None)
                 raw_input = getattr(tool_call, "input", None)
-                if isinstance(raw_input, str):
-                    try:
-                        tool_input = json.loads(raw_input)
-                    except (json.JSONDecodeError, TypeError):
-                        tool_input = {}
-                elif isinstance(raw_input, dict):
-                    tool_input = raw_input
-                else:
-                    tool_input = {}
 
+            if isinstance(raw_input, str):
+                try:
+                    tool_input = json.loads(raw_input)
+                except (json.JSONDecodeError, TypeError):
+                    tool_input = {}
+            elif isinstance(raw_input, dict):
+                tool_input = raw_input
+            else:
+                tool_input = {}
+
+            # Only intercept execute_shell_command
             if tool_name != "execute_shell_command":
                 async for chunk in next_handler(**input_kwargs):
                     yield chunk
@@ -264,7 +177,19 @@ def make_ssh_middleware_factory():
             manager = get_ssh_manager()
             conn = manager.get_connection(session_id)
             if conn is None:
-                # No active connection — fall back to local execution
+                # The session bound to the UI/tool may differ from the one
+                # that created the connection. With exactly one active
+                # connection the target is unambiguous.
+                fallback_id = manager.get_single_session_id()
+                if fallback_id:
+                    session_id = fallback_id
+                    conn = manager.get_connection(session_id)
+            if conn is None:
+                diagnostic.warning(
+                    "[Remote] No SSH connection for session %r; "
+                    "execute_shell_command runs locally",
+                    session_id,
+                )
                 async for chunk in next_handler(**input_kwargs):
                     yield chunk
                 return
@@ -272,7 +197,6 @@ def make_ssh_middleware_factory():
             # Extract command and timeout from tool_call input
             command = tool_input.get("command", "")
             timeout = tool_input.get("timeout", 60.0)
-            cwd = tool_input.get("cwd", "")
 
             if isinstance(timeout, str):
                 try:
@@ -280,12 +204,14 @@ def make_ssh_middleware_factory():
                 except (ValueError, TypeError):
                     timeout = 60.0
 
-            # Execute on remote — cwd is passed to execute_command which
-            # handles wrap_command_with_cwd internally
-            result = await _execute_remote(session_id, command, timeout, cwd)
+            # The agent's cwd refers to the local workspace, which usually
+            # does not exist on the remote host. Transparent forwarding
+            # always runs in the connection's remote working directory.
+            result = await _execute_remote(session_id, command, timeout)
             yield result
 
     def factory(ctx: Any, agent_config: Any):
-        return SSHMiddleware()
+        session_id = str(getattr(ctx, "session_id", "") or "")
+        return SSHMiddleware(session_id)
 
     return factory

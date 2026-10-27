@@ -8,19 +8,20 @@ Remote SSH 是一个 **QwenPaw 插件**，为聊天会话提供 SSH 远程连接
 
 - **Backend:** Python 3.10+, FastAPI, paramiko (SSH 客户端), agentscope SDK
 - **Frontend:** React 18, TypeScript, Vite
-- **Plugin Host:** QwenPaw (min_version: 1.1.7)
+- **Plugin Host:** QwenPaw 2.2.2+ (qwenpaw_version: >=2.2.2,<2.99.0)
 
 ### Architecture
 
-插件通过 **monkey-patching** 机制注入 QwenPaw 核心，不修改宿主源码：
+插件通过 QwenPaw 2.x 的官方注册 API 接入宿主，不使用猴补丁：
 
 ```
 plugin.py (根入口 shim)
 └── remote/plugin.py (后端实现入口)
-    ├── _patch_create_toolkit()  → remote/shell_wrapper.py (SSH 中间件)
-    ├── _patch_reply()           → remote/context.py (ContextVar 会话绑定)
-    └── _mount_router()          → remote/routers/connections.py (REST API)
+    ├── api.register_tools / register_slash_command  → remote/tools/
+    ├── api.register_middleware()  → remote/shell_wrapper.py (SSH 中间件)
+    └── api.register_http_router() → remote/routers/connections.py (REST API)
 
+remote/session.py (宿主 session 上下文桥接)
 remote/ssh_manager.py (SSH 连接单例，按 session_id 管理)
 remote/ssh_types.py (SSH 数据结构和通用命令包装 helper)
 remote/store.py (持久化连接配置/跳板机到 profiles.json)
@@ -32,11 +33,11 @@ remote/tools/ (remote_connect, remote_disconnect, remote_list, remote_exec, Remo
 | File | Purpose |
 |------|---------|
 | `plugin.py` | 插件系统入口 shim，导出 `remote.plugin.plugin` |
-| `remote/plugin.py` | 后端实现入口，注册 tools/startup/shutdown hooks，执行 monkey-patch |
+| `remote/plugin.py` | 后端实现入口，注册 tools/slash command/middleware/HTTP 路由/生命周期 hooks |
 | `remote/ssh_manager.py` | SSH 连接管理器单例，支持密码/密钥认证及跳板机，基于 paramiko |
 | `remote/ssh_types.py` | SSH 连接数据结构、健康状态、环境快照和 cwd 命令包装 helper |
-| `remote/context.py` | ContextVar 用于 session_id 会话隔离 |
-| `remote/shell_wrapper.py` | Toolkit 中间件，拦截 `execute_shell_command` 并转发到 SSH |
+| `remote/session.py` | 宿主 session 上下文桥接，供 legacy 工具获取当前 session_id |
+| `remote/shell_wrapper.py` | AgentScope 中间件工厂，拦截 `execute_shell_command` 并转发到 SSH |
 | `remote/store.py` | 连接配置/跳板机的持久化存储（JSON 文件） |
 | `remote/routers/connections.py` | FastAPI 路由，提供 REST API 管理 SSH 连接 |
 | `remote/tools/` | 注册到 QwenPaw 的 tool 函数 |
@@ -94,4 +95,4 @@ chmod +x scripts/package.sh
 - **日志前缀：** 日志使用 `[Remote]` 前缀
 - **测试：** 项目当前无测试文件
 - **敏感字段处理：** 响应中必须移除 `password` / `passphrase`（`_sanitize_secret_fields`）
-- **配置持久化：** 存储到 `WORKING_DIR/remote/profiles.json`，密码更新时保留未提供的敏感字段
+- **配置持久化：** 存储到 `WORKING_DIR/remote/profiles.json`，密码更新时保留未提供的敏感字段；文件以 `0600`、目录以 `0700` 权限保存
