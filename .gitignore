@@ -18,3 +18,5 @@ Thumbs.db
 
 # Code Agents
 .mimocode/
+.qwen/
+.zcode/

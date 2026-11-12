@@ -745,7 +745,9 @@ function buildPlugin() {
 
           if (result.sudo_needs_password) {
             const sudoPwd = prompt(
-              zh ? "SSH 使用密钥认证，需要输入 sudo 密码：" : "SSH uses key auth. Enter sudo password:"
+              zh
+                ? "尚未配置 sudo 密码，输入后可在远端使用 sudo（留空跳过）："
+                : "Sudo password is not configured. Enter it to enable sudo (leave empty to skip):"
             );
             if (sudoPwd) {
               await apiFetch(`/remote/connections/${sessionId}/sudo`, {
@@ -1552,7 +1554,9 @@ function buildPlugin() {
 
           if (result.sudo_needs_password) {
             const sudoPwd = prompt(
-              zh ? "SSH 使用密钥认证，需要输入 sudo 密码：" : "SSH uses key auth. Enter sudo password:"
+              zh
+                ? "尚未配置 sudo 密码，输入后可在远端使用 sudo（留空跳过）："
+                : "Sudo password is not configured. Enter it to enable sudo (leave empty to skip):"
             );
             if (sudoPwd) {
               await apiFetch(`/remote/connections/${sessionId}/sudo`, {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -12,15 +13,68 @@ from qwenpaw.constant import WORKING_DIR
 
 _REMOTE_DIR = WORKING_DIR / "remote"
 _PROFILES_FILE = _REMOTE_DIR / "profiles.json"
+# Plugin-owned host-key store.  paramiko's ``load_host_keys()`` records this
+# path, so ``AutoAddPolicy`` persists first-contact keys here (TOFU) and
+# later connections verify against it instead of blindly re-accepting.
+KNOWN_HOSTS_FILE = _REMOTE_DIR / "known_hosts"
+_KNOWN_HOSTS_LOCK = threading.RLock()
 
 
 def _restrict_permissions() -> None:
     """Keep stored credentials readable only by the current user."""
-    for path, mode in ((_REMOTE_DIR, 0o700), (_PROFILES_FILE, 0o600)):
+    for path, mode in (
+        (_REMOTE_DIR, 0o700),
+        (_PROFILES_FILE, 0o600),
+        (KNOWN_HOSTS_FILE, 0o600),
+    ):
         try:
             os.chmod(path, mode)
         except OSError:
             pass
+
+
+def ensure_known_hosts_file() -> Path:
+    """Return the plugin known_hosts path, creating it with strict perms."""
+    _REMOTE_DIR.mkdir(parents=True, exist_ok=True)
+    KNOWN_HOSTS_FILE.touch(exist_ok=True)
+    _restrict_permissions()
+    if os.name != "nt":
+        mode = KNOWN_HOSTS_FILE.stat().st_mode & 0o777
+        if mode & 0o077:
+            raise PermissionError(f"Unsafe permissions on {KNOWN_HOSTS_FILE}: {mode:o}")
+    return KNOWN_HOSTS_FILE
+
+
+def known_hosts_lock() -> threading.RLock:
+    """Serialize host-key file read/modify/write operations."""
+    return _KNOWN_HOSTS_LOCK
+
+
+def load_known_hosts(client: Any) -> None:
+    """Load the pinned host keys while serialized with persistence."""
+    with _KNOWN_HOSTS_LOCK:
+        client.load_host_keys(str(ensure_known_hosts_file()))
+
+
+def persist_known_hosts(*clients: Any) -> None:
+    """Merge newly observed keys into the current file without lost updates."""
+    import paramiko
+
+    with _KNOWN_HOSTS_LOCK:
+        path = ensure_known_hosts_file()
+        merged = paramiko.HostKeys()
+        merged.load(str(path))
+        for client in clients:
+            if client is None:
+                continue
+            for hostname, keys in client.get_host_keys().items():
+                for key_type, key in keys.items():
+                    # Existing pins are authoritative; never overwrite a
+                    # different key for the same host and key algorithm.
+                    if key_type not in merged.get(hostname, {}):
+                        merged.add(hostname, key_type, key)
+        merged.save(str(path))
+        _restrict_permissions()
 
 
 def _load_profiles_file() -> dict[str, Any]:
@@ -107,13 +161,23 @@ def _normalize_profile_payload(
     profile_id: str,
     existing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    profile = _normalize_ssh_endpoint(payload, endpoint_id=profile_id)
-    profile["name"] = (
-        str(payload.get("name", "")).strip() or _default_name(payload)
-    )
-    profile["jump_host_id"] = str(payload.get("jump_host_id", "")).strip()
-    profile["default_cwd"] = str(payload.get("default_cwd", "")).strip()
+    # When updating, seed the normalization input with the stored profile so
+    # a partial payload (e.g. PATCH with only ``default_cwd``) cannot wipe
+    # fields that were omitted.  Values supplied by the caller still win,
+    # including explicit empty strings for clearable fields.
+    source: dict[str, Any] = dict(existing) if existing is not None else {}
+    source.update(payload)
 
+    profile = _normalize_ssh_endpoint(source, endpoint_id=profile_id)
+    profile["name"] = str(source.get("name", "")).strip()
+    if not profile["name"]:
+        profile["name"] = _default_name(source)
+    profile["jump_host_id"] = str(source.get("jump_host_id", "")).strip()
+    profile["default_cwd"] = str(source.get("default_cwd", "")).strip()
+
+    # Secret fields fall back to the stored values when the caller omits or
+    # clears them (the API never echoes secrets back, so an empty value means
+    # "keep the existing secret").
     if existing is not None:
         if not profile["password"]:
             profile["password"] = str(existing.get("password", ""))
@@ -210,10 +274,15 @@ def _normalize_jump_host_payload(
     jump_host_id: str,
     existing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    jump_host = _normalize_ssh_endpoint(payload, endpoint_id=jump_host_id)
-    jump_host["name"] = (
-        str(payload.get("name", "")).strip() or _default_name(payload)
-    )
+    # Same merge semantics as profiles: omitting a field on update must not
+    # reset it to a default.
+    source: dict[str, Any] = dict(existing) if existing is not None else {}
+    source.update(payload)
+
+    jump_host = _normalize_ssh_endpoint(source, endpoint_id=jump_host_id)
+    jump_host["name"] = str(source.get("name", "")).strip()
+    if not jump_host["name"]:
+        jump_host["name"] = _default_name(source)
 
     if existing is not None:
         if not jump_host["password"]:

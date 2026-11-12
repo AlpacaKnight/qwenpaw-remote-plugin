@@ -203,6 +203,13 @@ QwenPaw Web 端会按 `plugin.json` 的 `entry.frontend` 加载前端 bundle。`
 
 不要包含 `node_modules`、`__pycache__`、`.venv`、`.git` 或其他开发阶段生成文件。
 
+## 安全说明
+
+- **凭据存储**：连接配置（`profiles.json`）含明文密码/密钥口令，写入时强制目录 `0700`、文件 `0600`，不要放宽权限或提交到仓库。
+- **主机密钥校验（TOFU）**：首次连接某主机时，其主机密钥会被记录到插件工作目录下的 `remote/known_hosts`（权限 `0600`）；之后的连接都会按该记录校验，密钥不匹配会明确报错（疑似中间人攻击或服务器密钥轮换），需人工核实后删除对应条目才能重新连接。同时仍加载系统 known_hosts 作为信任基准。
+- **sudo**：连接后不会自动把 SSH 登录密码用作 sudo 密码。sudo 只在用户显式提供密码时启用（UI 连接后的提示框、`POST /api/remote/connections/{session_id}/sudo`、`/remote set-sudo`）。
+- **会话隔离**：当宿主请求上下文携带会话 ID 时，所有以 `session_id` 为操作对象的 REST 端点都会拒绝跨会话访问（403）。普通 UI HTTP 请求通常没有 agent-turn 上下文，因此由 UI 显式传入 `session_id` 选择连接；不带 `session_id` 的连接列表返回空列表。插件本身不校验 `Authorization` 令牌，整体安全边界依赖宿主 API 鉴权（仅单用户/本机访问的部署方式下才安全，勿将 API 直接暴露到多租户网络）。
+
 ## Docker 中安装
 
 如果 QwenPaw 运行在 Docker 中，插件目录通常位于容器内的 `/app/working/plugins`。可以把打包后的 ZIP 复制进容器，再使用容器内的 QwenPaw CLI 强制安装：

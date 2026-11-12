@@ -56,12 +56,52 @@ def _validate_profile_jump_host(profile: dict) -> None:
         raise ValueError(f"jump host not found: {jump_host_id}")
 
 
+def _current_session_id() -> str | None:
+    """Best-effort read of the host's request-scoped session id.
+
+    The host binds ``current_session_id`` to the request context during
+    agent turns.  Plain HTTP requests from the UI panel carry no session
+    context, so this returns ``None`` for them.
+    """
+    try:
+        from qwenpaw.config.context import get_current_session_id
+    except (ImportError, LookupError, RuntimeError):
+        return None
+    try:
+        return get_current_session_id() or None
+    except (LookupError, RuntimeError):
+        return None
+
+
+def _check_session_ownership(session_id: str) -> None:
+    """Reject cross-session access when host request context is available.
+
+    The management UI calls these routes as ordinary HTTP requests; QwenPaw
+    does not bind an agent-turn session ContextVar to those requests. In that
+    case host API authentication is the boundary and the UI-provided session
+    id selects the connection. When context is available, it still prevents
+    an agent request from targeting another session.
+    """
+    current = _current_session_id()
+    if current and current != session_id:
+        raise HTTPException(
+            status_code=403,
+            detail="session_id does not match the current session",
+        )
+
+
 @router.get("/connections")
 async def list_connections(session_id: Optional[str] = None):
-    """List SSH connections, optionally filtered by session_id."""
+    """List SSH connections, optionally filtered by session_id.
+
+    When no ``session_id`` is supplied, the list is scoped to the caller's
+    own session (from the request context) instead of leaking every
+    session's connection details.
+    """
     manager = get_ssh_manager()
 
     if session_id:
+        _check_session_ownership(session_id)
         conn = manager.get_connection(session_id)
         if conn is None:
             return {"connections": []}
@@ -69,7 +109,18 @@ async def list_connections(session_id: Optional[str] = None):
         info["session_id"] = session_id
         return {"connections": [info]}
 
-    return {"connections": manager.list_connections()}
+    current = _current_session_id()
+    if current:
+        conn = manager.get_connection(current)
+        if conn is None:
+            return {"connections": []}
+        info = conn.to_dict()
+        info["session_id"] = current
+        return {"connections": [info]}
+
+    # No session context available (e.g. standalone host with no bound
+    # request session): do not enumerate all sessions' connections.
+    return {"connections": []}
 
 
 @router.get("/profiles")
@@ -79,6 +130,7 @@ async def get_profiles(session_id: Optional[str] = None):
     jump_host_names = _jump_host_name_map()
     active_profile_id = ""
     if session_id:
+        _check_session_ownership(session_id)
         conn = get_ssh_manager().get_connection(session_id)
         active_profile_id = conn.profile_id if conn else ""
 
@@ -227,6 +279,7 @@ async def connect_profile(profile_id: str, body: dict):
     session_id = str(body.get("session_id", "")).strip()
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
+    _check_session_ownership(session_id)
 
     profile = get_profile(profile_id)
     if profile is None:
@@ -268,13 +321,12 @@ async def connect_profile(profile_id: str, body: dict):
         except Exception:
             pass  # Best effort, don't fail the connection
 
-    # Configure sudo - always available
-    sudo_configured = False
-    sudo_password = str(profile.get("password", ""))
-    if sudo_password:
-        manager.set_sudo(session_id, sudo_password, enabled=True)
-        sudo_configured = True
-
+    # Sudo is never configured implicitly from the SSH login password.
+    # A fresh connect clears the session's sudo state, so it stays disabled
+    # until the user explicitly provides a sudo password via the UI prompt
+    # (POST /sudo) or /remote set-sudo.
+    sudo_state = manager.get_sudo_state(session_id)
+    sudo_configured = bool(sudo_state.get("enabled"))
     info["session_id"] = session_id
     info["sudo_configured"] = sudo_configured
     info["sudo_needs_password"] = not sudo_configured
@@ -285,6 +337,7 @@ async def connect_profile(profile_id: str, body: dict):
 async def create_connection(req: ConnectRequest):
     """Create a new SSH connection."""
     manager = get_ssh_manager()
+    _check_session_ownership(req.session_id)
 
     try:
         info = await manager.connect(
@@ -318,6 +371,7 @@ async def create_connection(req: ConnectRequest):
 async def delete_connection(session_id: str):
     """Disconnect an SSH session."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     disconnected = await manager.disconnect(session_id)
 
     if not disconnected:
@@ -333,6 +387,7 @@ async def delete_connection(session_id: str):
 async def exec_command(session_id: str, req: ExecRequest):
     """Execute a command on the remote host."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
 
     try:
         returncode, stdout, stderr = await manager.execute_command(
@@ -355,6 +410,7 @@ async def exec_command(session_id: str, req: ExecRequest):
 async def connection_status(session_id: str):
     """Check connection health."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     health = manager.get_health(session_id)
     conn = manager.get_connection(session_id)
 
@@ -372,6 +428,7 @@ async def connection_status(session_id: str):
 async def get_connection_health(session_id: str):
     """Get detailed health status for a session's connection."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     return {
         "session_id": session_id,
         "health": manager.get_health(session_id),
@@ -382,6 +439,7 @@ async def get_connection_health(session_id: str):
 async def force_health_check(session_id: str):
     """Force an immediate health check."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     health = await manager.force_health_check(session_id)
     return {
         "session_id": session_id,
@@ -393,6 +451,7 @@ async def force_health_check(session_id: str):
 async def reconnect_session(session_id: str):
     """Reconnect using cached connection parameters."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     try:
         info = await manager.auto_reconnect(session_id)
     except ValueError as e:
@@ -408,6 +467,7 @@ async def reconnect_session(session_id: str):
 async def get_cwd(session_id: str):
     """Get the current default working directory for a session."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     conn = manager.get_connection(session_id)
     if conn is None:
         return {"session_id": session_id, "default_cwd": "/", "cwd_ok": None}
@@ -422,6 +482,7 @@ async def get_cwd(session_id: str):
 async def set_cwd(session_id: str, req: CwdRequest):
     """Set the default working directory for a session."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     try:
         result = await manager.set_default_cwd(
             session_id=session_id,
@@ -441,6 +502,7 @@ async def set_cwd(session_id: str, req: CwdRequest):
 async def get_remote_info(session_id: str, refresh: bool = False):
     """Get cached remote environment info."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     snapshot = await manager.get_remote_env(session_id, refresh=refresh)
     return {
         "session_id": session_id,
@@ -452,6 +514,7 @@ async def get_remote_info(session_id: str, refresh: bool = False):
 async def refresh_remote_info(session_id: str):
     """Force refresh remote environment info."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     snapshot = await manager.get_remote_env(session_id, refresh=True)
     return {
         "session_id": session_id,
@@ -524,6 +587,7 @@ async def test_saved_profile(profile_id: str):
 async def configure_sudo(session_id: str, req: SudoConfigRequest):
     """Configure sudo for a session."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     manager.set_sudo(session_id, req.password, req.enabled)
     return {"status": "ok", "session_id": session_id}
 
@@ -532,6 +596,7 @@ async def configure_sudo(session_id: str, req: SudoConfigRequest):
 async def get_sudo_state(session_id: str):
     """Get sudo state for a session."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     return {
         "session_id": session_id,
         "sudo": manager.get_sudo_state(session_id),
@@ -542,6 +607,7 @@ async def get_sudo_state(session_id: str):
 async def verify_sudo(session_id: str):
     """Verify sudo access."""
     manager = get_ssh_manager()
+    _check_session_ownership(session_id)
     result = await manager.verify_sudo(session_id)
     result["session_id"] = session_id
     return result

@@ -6,7 +6,13 @@ import shlex
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from .store import find_jump_host_by_name, get_jump_host
+from .store import (
+    ensure_known_hosts_file,
+    find_jump_host_by_name,
+    get_jump_host,
+    load_known_hosts,
+    persist_known_hosts,
+)
 from .ssh_types import (
     RemoteEnvSnapshot,
     SSHConnectionInfo,
@@ -17,6 +23,52 @@ from .ssh_types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _new_client() -> "paramiko.SSHClient":
+    """Create an SSH client with TOFU host-key pinning.
+
+    First contact with a host is accepted and persisted to the plugin's
+    ``known_hosts`` file; every later connection verifies the stored key,
+    so a changed host key (potential MITM) is rejected instead of silently
+    re-trusted.
+    """
+    import paramiko
+
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    load_known_hosts(client)
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    return client
+
+
+def _format_bad_host_key(
+    exc: "paramiko.BadHostKeyException",
+    host: str,
+    port: int,
+) -> str:
+    """Build a clear remediation message for a host-key mismatch."""
+    expected = None
+    try:
+        expected = exc.expected_key.get_fingerprint()
+    except Exception:
+        expected = getattr(exc, "expected_key", None)
+    received = None
+    try:
+        received = exc.key.get_fingerprint()
+    except Exception:
+        received = getattr(exc, "key", None)
+    message = (
+        f"Host key verification failed for {host}:{port}. "
+        "The server presented a different key than previously recorded, "
+        "which may indicate a man-in-the-middle attack or a server key "
+        "rotation. If you verified the new key out-of-band, delete the "
+        f"stale entry for {host}:{port} from "
+        f"{ensure_known_hosts_file()} and reconnect."
+    )
+    if expected is not None and received is not None:
+        message += f" Expected: {expected}, got: {received}."
+    return message
 
 
 class ChannelOpenError(ConnectionError):
@@ -150,14 +202,6 @@ class SSHManager:
                 connect_kwargs["sock"] = sock
             return connect_kwargs
 
-        def _new_client() -> paramiko.SSHClient:
-            client = paramiko.SSHClient()
-            # Verify keys for hosts already present in known_hosts; only
-            # first-time hosts are auto-added.
-            client.load_system_host_keys()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            return client
-
         def _do_connect() -> tuple[paramiko.SSHClient, paramiko.SSHClient | None]:
             jump_client = None
             sock = None
@@ -192,6 +236,13 @@ class SSHManager:
                         "Check your jump host username and password/key. "
                         f"({e})"
                     ) from e
+                except paramiko.BadHostKeyException as e:
+                    jump_client.close()
+                    raise ConnectionError(
+                        _format_bad_host_key(
+                            e, jump_config["host"], jump_config["port"]
+                        )
+                    ) from e
                 except Exception:
                     jump_client.close()
                     raise
@@ -223,6 +274,8 @@ class SSHManager:
                 f"Authentication failed for {username}@{host}:{port}. "
                 f"Check your username and password/key. ({e})"
             ) from e
+        except paramiko.BadHostKeyException as e:
+            raise ConnectionError(_format_bad_host_key(e, host, port)) from e
         except paramiko.SSHException as e:
             via = (
                 f" via jump host {jump_config['host']}:{jump_config['port']}"
@@ -249,6 +302,17 @@ class SSHManager:
                 _transport = _client.get_transport()
                 if _transport is not None:
                     _transport.join_thread = False
+
+        # AutoAddPolicy only keeps new host keys in memory — persist them
+        # to the plugin known_hosts file so the next connection verifies
+        # against the recorded key instead of re-accepting it blindly.
+        try:
+            persist_known_hosts(client, jump_client)
+        except Exception as e:
+            client.close()
+            if jump_client is not None:
+                jump_client.close()
+            raise ConnectionError(f"Could not persist SSH host key: {e}") from e
 
         info = SSHConnectionInfo(
             client=client,
@@ -1234,14 +1298,6 @@ done"""
                 connect_kwargs["sock"] = sock
             return connect_kwargs
 
-        def _new_client() -> paramiko.SSHClient:
-            client = paramiko.SSHClient()
-            # Verify keys for hosts already present in known_hosts; only
-            # first-time hosts are auto-added.
-            client.load_system_host_keys()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            return client
-
         def _do_test() -> dict:
             jump_client = None
             sock = None
@@ -1267,6 +1323,13 @@ done"""
                         (host, port),
                         ("", 0),
                     )
+                except paramiko.BadHostKeyException as e:
+                    jump_client.close()
+                    raise ConnectionError(
+                        _format_bad_host_key(
+                            e, jump_config["host"], jump_config["port"]
+                        )
+                    ) from e
                 except Exception:
                     jump_client.close()
                     raise
@@ -1286,6 +1349,11 @@ done"""
                     )
                 )
                 latency_ms = round((_time.monotonic() - t0) * 1000, 1)
+
+                # Pin keys immediately after the SSH handshakes. A later
+                # probe failure must not turn this host into an unpinned
+                # first contact on the next attempt.
+                persist_known_hosts(client, jump_client)
 
                 # Quick env detection
                 transport = client.get_transport()
@@ -1331,6 +1399,8 @@ done"""
                 f"Authentication failed for {username}@{host}:{port}. "
                 f"({e})"
             ) from e
+        except paramiko.BadHostKeyException as e:
+            raise ConnectionError(_format_bad_host_key(e, host, port)) from e
         except paramiko.SSHException as e:
             raise ConnectionError(
                 f"SSH error connecting to {host}:{port}: {e}"
